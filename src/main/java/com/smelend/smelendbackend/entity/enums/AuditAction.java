@@ -1,0 +1,34 @@
+package com.smelend.smelendbackend.entity.enums;
+
+public enum AuditAction {
+    REGISTER,
+    LOGIN,
+
+    SME_CREATED,
+    SME_UPDATED,
+
+    PROMOTER_ADDED,
+
+    APPLICATION_CREATED,
+    APPLICATION_SUBMITTED,
+
+    DOCUMENT_ADDED,
+
+    KYC_CREATED,
+    KYC_VERIFIED,
+    KYC_REJECTED,
+
+    UW_DECISION,
+
+    OFFER_CREATED,
+    OFFER_ACCEPTED,
+    OFFER_REJECTED,
+
+    DISBURSED,
+    EMI_SCHEDULE_GENERATED,
+
+    REPAYMENT_POSTED,
+
+    PTP_CREATED,
+    PTP_STATUS_UPDATED
+}
