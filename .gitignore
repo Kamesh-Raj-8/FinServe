@@ -11,3 +11,7 @@ bin/
 .project
 .DS_Store
 Thumbs.db
+
+.vscode/
+.idea/
+*.iml
