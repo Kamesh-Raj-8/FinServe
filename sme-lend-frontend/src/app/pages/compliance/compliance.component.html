@@ -1,0 +1,96 @@
+<div class="fade-in">
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+    <div>
+      <h4><i class="bi bi-shield-check"></i> Compliance — Audit Log</h4>
+      <p>Complete system audit trail for all actions</p>
+    </div>
+    <div style="display:flex;gap:.5rem;align-items:center;">
+      @if (isReadOnly()) {
+        <span class="readonly-badge"><i class="bi bi-eye-fill"></i> View Only</span>
+      }
+      <button class="btn btn-outline-primary btn-sm" (click)="loadAll()" [disabled]="loading()">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+    </div>
+  </div>
+
+  @if (alertMsg()) {
+    <div class="alert mb-3" [class]="'alert-'+alertType()">
+      <i class="bi me-2"></i>{{ alertMsg() }}
+    </div>
+  }
+
+  <!-- Filter Bar -->
+  <div class="card mb-3">
+    <div class="card-body" style="padding:.75rem 1rem;">
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+          <label class="form-label" style="font-size:.78rem;margin-bottom:.2rem;">Action</label>
+          <input type="text" class="form-control form-control-sm" [(ngModel)]="filterAction" placeholder="e.g. KYC_VERIFIED" style="min-width:160px;">
+        </div>
+        <div>
+          <label class="form-label" style="font-size:.78rem;margin-bottom:.2rem;">Ref Type</label>
+          <input type="text" class="form-control form-control-sm" [(ngModel)]="filterRefType" placeholder="e.g. KYC, SME" style="min-width:120px;">
+        </div>
+        <div>
+          <label class="form-label" style="font-size:.78rem;margin-bottom:.2rem;">Ref ID</label>
+          <input type="number" class="form-control form-control-sm font-mono" [(ngModel)]="filterRefId" placeholder="0" style="min-width:80px;">
+        </div>
+        <div>
+          <label class="form-label" style="font-size:.78rem;margin-bottom:.2rem;">Actor User ID</label>
+          <input type="number" class="form-control form-control-sm font-mono" [(ngModel)]="filterActorId" placeholder="0" style="min-width:100px;">
+        </div>
+        <div style="display:flex;gap:.35rem;align-self:flex-end;">
+          <button class="btn btn-primary btn-sm" (click)="applyFilter()"><i class="bi bi-funnel"></i> Filter</button>
+          <button class="btn btn-outline-secondary btn-sm" (click)="clearFilter()"><i class="bi bi-x-lg"></i> Clear</button>
+        </div>
+        <div style="margin-left:auto;align-self:flex-end;font-size:.8rem;color:var(--text-muted);">
+          Showing {{ filtered().length }} / {{ auditLogs().length }} logs
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit Log Table -->
+  <div class="card">
+    <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-list-ul"></i> Audit Events</span></div>
+    @if (loading()) {
+      <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div>
+    } @else if (filtered().length === 0) {
+      <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2"><i class="bi bi-shield-check" style="font-size:2.5rem;"></i><p>No audit logs found</p></div>
+    } @else {
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Timestamp</th>
+              <th>Action</th>
+              <th>Ref Type</th>
+              <th>Ref ID</th>
+              <th>Actor</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>
+        @for (log of pgFiltered.paged(); track log.auditId) {
+              <tr>
+                <td class="font-mono" style="font-size:.75rem;color:var(--text-muted);">{{ log.auditId }}</td>
+                <td style="font-size:.75rem;white-space:nowrap;">{{ formatDate(log.createdDate) }}</td>
+                <td><span class="badge-status" [class]="actionBadge(log.action)" style="font-size:.7rem;">{{ log.action }}</span></td>
+                <td style="font-size:.8rem;font-weight:600;">{{ log.refType }}</td>
+                <td class="font-mono" style="font-size:.8rem;color:var(--primary);">#{{ log.refId }}</td>
+                <td style="font-size:.78rem;">
+                  <div style="font-weight:500;">{{ log.actorEmail || '—' }}</div>
+                  <div style="color:var(--text-muted);font-size:.7rem;">#{{ log.actorUserId }}</div>
+                </td>
+                <td style="font-size:.78rem;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ log.message || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+          </table>
+          <app-paginator [pg]="pgFiltered"></app-paginator>
+      </div>
+    }
+  </div>
+</div>

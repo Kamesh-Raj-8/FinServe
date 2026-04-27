@@ -1,0 +1,300 @@
+<div class="fade-in">
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+    <div>
+      <h4><i class="bi bi-collection"></i> Collections</h4>
+      <p>Manage delinquencies and promise-to-pay (PTP) agreements</p>
+    </div>
+    @if (!auth.hasRole('COLLECTIONS')) {
+      <span class="readonly-badge"><i class="bi bi-eye-fill"></i> View Only</span>
+    }
+  </div>
+
+  @if (alertMsg()) {
+    <div class="alert mb-3" [class]="'alert-'+alertType()">
+      <i class="bi me-2"
+         [class.bi-check-circle-fill]="alertType()==='success'"
+         [class.bi-exclamation-triangle-fill]="alertType()==='danger'"></i>{{ alertMsg() }}
+    </div>
+  }
+
+  <div class="row g-3 align-items-start">
+
+    <!-- ══ LEFT col: Delinquency + Charges stacked, same width ══════ -->
+    <div class="col-lg-8 d-flex flex-column gap-3">
+
+      <!-- Delinquency Register -->
+      <div class="card mb-0">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="card-title"><i class="bi bi-exclamation-triangle"></i> Delinquency Register</span>
+          <div class="d-flex gap-2 align-items-center">
+            <input class="form-control form-control-sm"
+                   [(ngModel)]="delinqSearch"
+                   (input)="onDelinqSearch()"
+                   placeholder="Search Loan ID, DPD, bucket…"
+                   style="max-width:220px;">
+            <button class="btn btn-outline-secondary btn-sm" (click)="loadDelinquencies()">
+              <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+          </div>
+        </div>
+        @if (loadingDelinq()) {
+          <div class="d-flex justify-content-center align-items-center py-5">
+            <div class="spinner-border text-primary"></div>
+          </div>
+        } @else if (delinquencies().length === 0) {
+          <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2">
+            <i class="bi bi-check-circle text-success" style="font-size:2.5rem;"></i>
+            <p>No delinquencies found</p>
+          </div>
+        } @else {
+          <div class="table-responsive">
+            <table class="table mb-0">
+              <thead>
+                <tr>
+                  <th>Loan Account</th><th>DPD</th><th>Bucket</th><th>As Of Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (pgDelinq.paged().length === 0) {
+                  <tr>
+                    <td colspan="4" class="text-center text-muted py-3 small">
+                      No results match "{{ delinqSearch }}"
+                    </td>
+                  </tr>
+                }
+                @for (d of pgDelinq.paged(); track d.delinquencyId) {
+                  <tr>
+                    <td class="font-mono" style="color:var(--primary);">#{{ d.loanAccountId }}</td>
+                    <td style="font-weight:600;color:var(--danger);">{{ d.dpd }} days</td>
+                    <td><span class="badge-status" [class]="bucketColor(d.bucket)">{{ d.bucket }}</span></td>
+                    <td style="font-size:.8rem;color:var(--text-muted);">{{ d.asOfDate || '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+            <app-paginator [pg]="pgDelinq"></app-paginator>
+          </div>
+        }
+      </div>
+
+      <!-- Charges (same col-lg-8 width, directly below delinquency) -->
+      <div class="card mb-0">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <span class="fw-bold d-flex align-items-center gap-2"
+                style="font-family:var(--fs-font-head);color:#0f766e;">
+            <i class="bi bi-receipt-cutoff"></i> Charges
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <!-- Form inputs + table in one wrapper so padding/border is shared -->
+          <div style="padding:.75rem 1rem .5rem;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 2fr auto;gap:.5rem;align-items:end;">
+              <div>
+                <label class="form-label mb-1" style="font-size:.72rem;">Loan Account ID</label>
+                <input class="form-control form-control-sm" [(ngModel)]="chargeLoanId"
+                       placeholder="e.g. 1001" (keyup.enter)="loadCharges()">
+              </div>
+              <div>
+                <label class="form-label mb-1" style="font-size:.72rem;">Charge Type</label>
+                <select class="form-select form-select-sm" [(ngModel)]="chargeType">
+                  @for (t of ['PENAL','PROCESSING','PREPAYMENT','INSURANCE','TECH','OTHER']; track t) {
+                    <option [value]="t">{{ t }}</option>
+                  }
+                </select>
+              </div>
+              <div>
+                <label class="form-label mb-1" style="font-size:.72rem;">Amount (₹)</label>
+                <input type="number" class="form-control form-control-sm"
+                       [(ngModel)]="chargeAmount" placeholder="0.00">
+              </div>
+              <div>
+                <label class="form-label mb-1" style="font-size:.72rem;">Description</label>
+                <input class="form-control form-control-sm"
+                       [(ngModel)]="chargeDesc" placeholder="Reason for charge">
+              </div>
+              <div class="d-flex gap-1">
+                <button class="btn btn-outline-primary btn-sm" (click)="loadCharges()">
+                  <i class="bi bi-search"></i>
+                </button>
+                <button class="btn btn-primary btn-sm" (click)="postCharge()" [disabled]="postingCharge()">
+                  @if (postingCharge()) { <span class="spinner-border spinner-border-sm"></span> }
+                  @else { <i class="bi bi-plus-lg"></i> }
+                  Post
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size:.82rem;">
+              <thead>
+                <tr>
+                  <th>#</th><th>Type</th><th>Amount</th>
+                  <th>Description</th><th>Date</th><th>Status</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (loadingCharges()) {
+                  <tr><td colspan="7" class="text-center py-4">
+                    <span class="spinner-border text-primary"></span>
+                  </td></tr>
+                } @else if (charges().length === 0) {
+                  <tr><td colspan="7" class="text-center text-muted py-4 small">
+                    Enter a Loan Account ID and click 🔍 to load charges.
+                  </td></tr>
+                } @else {
+                  @for (ch of pgCharges.paged(); track ch.chargeId) {
+                    <tr>
+                      <td class="font-mono" style="color:var(--bs-primary);">#{{ ch.chargeId }}</td>
+                      <td><span class="badge-status bs-draft">{{ ch.chargeType }}</span></td>
+                      <td class="font-mono fw-bold">₹{{ ch.amount | number:'1.2-2' }}</td>
+                      <td class="text-muted">{{ ch.description || '—' }}</td>
+                      <td>{{ ch.chargeDate || '—' }}</td>
+                      <td>
+                        <span class="badge-status"
+                              [class.bs-pending]="ch.status==='OUTSTANDING'"
+                              [class.bs-verified]="ch.status==='PAID'"
+                              [class.bs-inactive]="ch.status==='WAIVED'">
+                          {{ ch.status }}
+                        </span>
+                      </td>
+                      <td>
+                        @if (ch.status === 'OUTSTANDING') {
+                          <button class="btn btn-outline-warning btn-sm"
+                                  (click)="waiveCharge(ch.chargeId)"
+                                  [disabled]="waivingCharge() === ch.chargeId"
+                                  title="Waive">
+                            @if (waivingCharge() === ch.chargeId) {
+                              <span class="spinner-border spinner-border-sm me-1"></span>
+                            } @else {
+                              <i class="bi bi-eraser me-1"></i>
+                            }
+                            Waive
+                          </button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-paginator [pg]="pgCharges"></app-paginator>
+        </div>
+      </div>
+
+    </div><!-- /col-lg-8 -->
+
+    <!-- ══ RIGHT col: Create PTP + PTP Lookup ═══════════════════════ -->
+    <div class="col-lg-4">
+
+      <!-- Create PTP -->
+      <div class="card mb-3">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2">
+            <i class="bi bi-calendar-check"></i> Create PTP
+          </span>
+        </div>
+        <div class="card-body">
+          <form [formGroup]="ptpForm" (ngSubmit)="createPtp()">
+            <div class="mb-2">
+              <label class="form-label">Loan Account ID *</label>
+              <input type="number" class="form-control font-mono" formControlName="loanAccountId"
+                     placeholder="e.g. 1"
+                     [class.is-invalid]="pf['loanAccountId'].invalid && pf['loanAccountId'].touched">
+              <div class="invalid-feedback">Required</div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Promise Date *</label>
+              <input type="date" class="form-control" formControlName="promiseDate" [min]="minPtpDate"
+                     [class.is-invalid]="pf['promiseDate'].invalid && pf['promiseDate'].touched">
+              <div class="invalid-feedback">Required</div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Promised Amount *</label>
+              <input type="number" class="form-control" formControlName="promisedAmount" placeholder="₹"
+                     [class.is-invalid]="pf['promisedAmount'].invalid && pf['promisedAmount'].touched">
+              <div class="invalid-feedback">Required</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" formControlName="notes" rows="2"
+                        placeholder="Optional remarks…"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary w-100" [disabled]="creatingPtp()">
+              @if (creatingPtp()) {
+                <span class="spinner-border spinner-border-sm"></span> Creating…
+              } @else {
+                <i class="bi bi-plus-circle"></i> Create PTP
+              }
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- PTP Lookup -->
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2">
+            <i class="bi bi-search"></i> PTP Lookup
+          </span>
+        </div>
+        <div class="card-body">
+          <div style="display:flex;gap:.5rem;margin-bottom:.75rem;">
+            <input type="number" class="form-control font-mono" [(ngModel)]="lookupAccountId"
+                   placeholder="Loan Account ID" (keyup.enter)="loadPtps()">
+            <button class="btn btn-outline-primary" (click)="loadPtps()" [disabled]="!lookupAccountId">
+              @if (loadingPtps()) { <span class="spinner-border spinner-border-sm"></span> }
+              @else { <i class="bi bi-search"></i> }
+            </button>
+          </div>
+
+          @if (!hasSearchedPtp()) {
+            <div class="text-center text-muted py-3 small">
+              Enter a Loan Account ID to view PTPs
+            </div>
+          } @else if (loadingPtps()) {
+            <div class="text-center py-2">
+              <div class="spinner-border spinner-border-sm text-primary"></div>
+            </div>
+          } @else if (ptps().length === 0) {
+            <div class="d-flex align-items-center gap-3 p-3 rounded-3 bg-light text-muted">
+              <i class="bi bi-calendar-x"></i>
+              <p style="margin:0;font-size:.82rem;">
+                No PTPs found for Account <span class="font-mono">#{{ lookupAccountId }}</span>
+              </p>
+            </div>
+          } @else {
+            @for (ptp of pgPtps.paged(); track ptp.ptpId) {
+              <div style="padding:.6rem .75rem;border:1px solid var(--border);
+                          border-radius:.5rem;margin-bottom:.5rem;font-size:.85rem;">
+                <div style="display:flex;justify-content:space-between;
+                            align-items:center;margin-bottom:.35rem;">
+                  <span class="font-mono" style="font-weight:600;">#{{ ptp.ptpId }}</span>
+                  <span class="badge-status" [class]="ptpBadge(ptp.status)">{{ ptp.status }}</span>
+                </div>
+                <div>Date: <strong>{{ ptp.promiseDate }}</strong> · ₹{{ ptp.promisedAmount | number }}</div>
+                @if (ptp.notes) {
+                  <div style="color:var(--text-muted);margin-top:.25rem;">{{ ptp.notes }}</div>
+                }
+                @if (ptp.status === 'OPEN' && auth.hasRole('COLLECTIONS')) {
+                  <div style="display:flex;gap:.35rem;margin-top:.5rem;">
+                    <button class="btn btn-success btn-sm"
+                            (click)="updateStatus(ptp,'KEPT')" [disabled]="updatingPtp()">Kept</button>
+                    <button class="btn btn-danger btn-sm"
+                            (click)="updateStatus(ptp,'BROKEN')" [disabled]="updatingPtp()">Broken</button>
+                    <button class="btn btn-outline-secondary btn-sm"
+                            (click)="updateStatus(ptp,'CANCELLED')" [disabled]="updatingPtp()">Cancel</button>
+                  </div>
+                }
+              </div>
+            }
+            <app-paginator [pg]="pgPtps"></app-paginator>
+          }
+        </div>
+      </div>
+
+    </div><!-- /col-lg-4 -->
+
+  </div><!-- /row -->
+
+</div>

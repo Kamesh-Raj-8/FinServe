@@ -1,0 +1,344 @@
+<div class="fade-in">
+
+  <!-- Page Header -->
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+    <div>
+      <h4 class="fw-bold mb-0 d-flex align-items-center gap-2">
+        <i class="bi bi-send-check" style="color:var(--bs-primary);"></i> Operations
+      </h4>
+      <p class="text-muted small mt-1">Manage approved applications, offers and disbursements</p>
+    </div>
+    <button class="btn btn-outline-primary btn-sm" (click)="loadAll()">
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="fs-tab-group mb-3">
+    <button class="fs-tab-btn" [class.active]="tab()===0" (click)="tab.set(0)">
+      <i class="bi bi-check-circle me-1"></i>Approved Apps
+      <span class="badge-status bs-draft ms-1" style="font-size:.6rem;">{{ approvedApps().length }}</span>
+    </button>
+    <button class="fs-tab-btn" [class.active]="tab()===1" (click)="tab.set(1)">
+      <i class="bi bi-tag me-1"></i>Create Offer
+    </button>
+    <button class="fs-tab-btn" [class.active]="tab()===2" (click)="tab.set(2); loadPendingDisbursements()">
+      <i class="bi bi-bank me-1"></i>Disburse Loan
+    </button>
+    <button class="fs-tab-btn" [class.active]="tab()===3" (click)="tab.set(3); loadPendingDisbursements()">
+      <i class="bi bi-list-check me-1"></i>Ready to Disburse
+      <span class="badge ms-1 text-white" style="background:#10b981;font-size:.6rem;">{{ pendingDisb().length }}</span>
+    </button>
+  </div>
+
+  <!-- ══ TAB 0: APPROVED APPS ══════════════════════════════════════ -->
+  @if (tab() === 0) {
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span class="fw-bold d-flex align-items-center gap-2" style="font-family:var(--fs-font-head);color:#0f766e;">
+          <i class="bi bi-check-circle"></i> UW-Approved Applications
+        </span>
+        <input class="form-control form-control-sm" style="max-width:240px;"
+               [(ngModel)]="opsSearch" (input)="onOpsSearch()"
+               placeholder="Search by ID or SME…">
+      </div>
+      @if (loadingApproved()) {
+        <div class="d-flex justify-content-center py-5"><span class="spinner-border text-primary"></span></div>
+      } @else if (approvedApps().length === 0) {
+        <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2">
+          <i class="bi bi-inbox" style="font-size:2.5rem;opacity:.25;"></i>
+          <p>No UW-Approved applications yet.</p>
+        </div>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>#App</th><th>SME</th><th>Product</th>
+                <th>Amount</th><th>Tenor</th><th>Status</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of pgApps.paged(); track a.applicationId) {
+                <tr>
+                  <td class="font-mono fw-bold" style="color:var(--bs-primary);">#{{ a.applicationId }}</td>
+                  <td>{{ a.smeLegalName || '—' }}</td>
+                  <td>{{ a.productName || '—' }}</td>
+                  <td class="font-mono">{{ formatCurrency(a.requestedAmount) }}</td>
+                  <td>{{ a.tenorMonths }}m</td>
+                  <td><span [class]="statusClass(a.status)">{{ a.status }}</span></td>
+                  <td>
+                    <button class="btn btn-sm btn-primary"
+                            (click)="selectedApp.set(a); tab.set(1)"
+                            title="Create Offer for this application">
+                      <i class="bi bi-tag me-1"></i>Create Offer
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-paginator [pg]="pgApps"></app-paginator>
+      }
+    </div>
+  }
+
+  <!-- ══ TAB 1: CREATE OFFER ═══════════════════════════════════════ -->
+  @if (tab() === 1) {
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <span class="fw-bold d-flex align-items-center gap-2" style="font-family:var(--fs-font-head);color:#0f766e;">
+              <i class="bi bi-tag"></i> Create Offer
+              @if (selectedApp()) { <span class="badge-status bs-pending">App #{{ selectedApp()!.applicationId }}</span> }
+            </span>
+          </div>
+          <div class="card-body">
+            @if (!selectedApp()) {
+              <div class="alert alert-primary border-0 d-flex gap-2">
+                <i class="bi bi-info-circle-fill mt-1"></i>
+                Select an application from the <strong>Approved Apps</strong> tab first.
+              </div>
+            } @else {
+              <!-- Selected App Summary -->
+              <div class="d-flex flex-wrap gap-4 p-3 rounded-3 mb-3" style="background:#f0fdfa;border:1.5px solid #ccfbf1;font-size:.82rem;">
+                <div><div class="text-muted">Application</div><div class="font-mono fw-bold">#{{ selectedApp()!.applicationId }}</div></div>
+                <div><div class="text-muted">SME</div><div class="fw-bold">{{ selectedApp()!.smeLegalName }}</div></div>
+                <div><div class="text-muted">Product</div><div>{{ selectedApp()!.productName }}</div></div>
+                <div><div class="text-muted">Requested</div><div class="font-mono fw-bold">{{ formatCurrency(selectedApp()!.requestedAmount) }}</div></div>
+                <div><div class="text-muted">Tenor</div><div>{{ selectedApp()!.tenorMonths }}m</div></div>
+              </div>
+
+              <form [formGroup]="offerForm" (ngSubmit)="createOffer()">
+                <div class="row g-3">
+                  <div class="col-6">
+                    <label class="form-label">Sanctioned Amount *</label>
+                    <input type="number" class="form-control font-mono" formControlName="sanctionedAmount"
+                           placeholder="e.g. 500000"
+                           [class.is-invalid]="of['sanctionedAmount'].invalid && of['sanctionedAmount'].touched">
+                    <div class="invalid-feedback">Required</div>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">Interest Rate % *</label>
+                    <input type="number" step="0.01" class="form-control" formControlName="interestRate"
+                           placeholder="e.g. 12.5"
+                           [class.is-invalid]="of['interestRate'].invalid && of['interestRate'].touched">
+                    <div class="invalid-feedback">Required</div>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">Monthly EMI *</label>
+                    <input type="number" class="form-control font-mono" formControlName="emiAmount"
+                           placeholder="e.g. 9000"
+                           [class.is-invalid]="of['emiAmount'].invalid && of['emiAmount'].touched">
+                    <div class="invalid-feedback">Required</div>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">Valid Until *</label>
+                    <input type="date" class="form-control" formControlName="validUntil" [min]="minOfferDate"
+                           [class.is-invalid]="of['validUntil'].invalid && of['validUntil'].touched">
+                    <div class="invalid-feedback">Required</div>
+                  </div>
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                  <button type="submit" class="btn btn-primary" [disabled]="creatingOffer()">
+                    @if (creatingOffer()) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    Create Offer
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" (click)="selectedApp.set(null); offerForm.reset()">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ══ TAB 2: DISBURSE LOAN ══════════════════════════════════════ -->
+  @if (tab() === 2) {
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-header">
+            <span class="fw-bold d-flex align-items-center gap-2" style="font-family:var(--fs-font-head);color:#0f766e;">
+              <i class="bi bi-bank"></i> Disburse Loan
+            </span>
+          </div>
+          <div class="card-body">
+            @if (selectedPending()) {
+              <!-- Pre-filled from Ready-to-Disburse list -->
+              <div class="d-flex flex-wrap gap-4 p-3 rounded-3 mb-3" style="background:#f0fdfa;border:1.5px solid #ccfbf1;font-size:.82rem;">
+                <div><div class="text-muted">Application</div><div class="font-mono fw-bold">#{{ selectedPending()!.applicationId }}</div></div>
+                <div><div class="text-muted">SME</div><div class="fw-bold">{{ selectedPending()!.smeLegalName }}</div></div>
+                <div><div class="text-muted">Sanctioned Amount</div><div class="font-mono fw-bold" style="color:#0d9488;">{{ formatCurrency(selectedPending()!.sanctionedAmount) }}</div></div>
+                <div><div class="text-muted">Rate</div><div>{{ selectedPending()!.interestRate }}% p.a.</div></div>
+                <div><div class="text-muted">EMI</div><div class="font-mono">{{ formatCurrency(selectedPending()!.emiAmount) }}/mo</div></div>
+              </div>
+            }
+
+            <form [formGroup]="disburseForm" (ngSubmit)="disburse()">
+              <div class="row g-3">
+                <div class="col-6">
+                  <label class="form-label">Application ID *</label>
+                  <input type="number" class="form-control font-mono" formControlName="applicationId"
+                         placeholder="e.g. 8"
+                         [class.is-invalid]="df['applicationId'].invalid && df['applicationId'].touched">
+                  <div class="invalid-feedback">Required</div>
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Net Disbursement Amount</label>
+                  <div class="form-control bg-light font-mono fw-bold" style="color:#0d9488;">
+                    @if (selectedPending()) {
+                      {{ formatCurrency(selectedPending()!.sanctionedAmount) }}
+                      <small class="text-muted fw-normal d-block" style="font-size:.7rem;">
+                        Auto-calculated: sanctioned − fees. Cannot be manually changed.
+                      </small>
+                    } @else {
+                      <span class="text-muted">Select application</span>
+                    }
+                  </div>
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Mode *</label>
+                  <select class="form-select" formControlName="mode">
+                    @for (m of modes; track m) { <option [value]="m">{{ m }}</option> }
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Transaction Ref</label>
+                  <input class="form-control font-mono" formControlName="transactionRef"
+                         placeholder="TXN123456">
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Disbursement Date *</label>
+                  <input type="date" class="form-control" formControlName="disbursementDate"
+                         [class.is-invalid]="df['disbursementDate'].invalid && df['disbursementDate'].touched">
+                  <div class="invalid-feedback">Required (within 30 days of today)</div>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary w-100 mt-3" [disabled]="disbursing()">
+                @if (disbursing()) { <span class="spinner-border spinner-border-sm me-2"></span>Processing… }
+                @else { <i class="bi bi-bank me-2"></i>Disburse Now }
+              </button>
+            </form>
+
+            <!-- Success Result -->
+            @if (disburseResult()) {
+              <div class="mt-3 p-3 rounded-3" style="background:#f0fdf4;border:1.5px solid #bbf7d0;">
+                <div class="fw-bold text-success mb-2 d-flex align-items-center gap-2">
+                  <i class="bi bi-check-circle-fill"></i> Disbursement Successful
+                </div>
+                <div class="row g-2" style="font-size:.82rem;">
+                  <div class="col-6"><span class="text-muted">Loan Account ID</span><br>
+                    <span class="font-mono fw-bold" style="color:#0d9488;">#{{ disburseResult()!.loanAccount.loanAccountId }}</span></div>
+                  <div class="col-6"><span class="text-muted">Account No.</span><br>
+                    <span class="font-mono">{{ disburseResult()!.loanAccount.accountNumber }}</span></div>
+                  <div class="col-6"><span class="text-muted">Principal</span><br>
+                    <span class="font-mono fw-bold">{{ formatCurrency(disburseResult()!.loanAccount.principalSanctioned) }}</span></div>
+                  <div class="col-6"><span class="text-muted">Tenor / Rate</span><br>
+                    <span>{{ disburseResult()!.loanAccount.tenorMonths }}m &#64; {{ disburseResult()!.loanAccount.interestRate }}%</span></div>
+                  <div class="col-6"><span class="text-muted">Mode</span><br>
+                    <span>{{ disburseResult()!.mode }}</span></div>
+                  <div class="col-6"><span class="text-muted">Transaction Ref</span><br>
+                    <span class="font-mono">{{ disburseResult()!.transactionRef || '—' }}</span></div>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ══ TAB 3: READY TO DISBURSE ══════════════════════════════════ -->
+  @if (tab() === 3) {
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span class="fw-bold d-flex align-items-center gap-2" style="font-family:var(--fs-font-head);color:#0f766e;">
+          <i class="bi bi-list-check"></i> Ready to Disburse
+          <span class="badge text-white" style="background:#10b981;">{{ pendingDisb().length }}</span>
+        </span>
+        <div class="d-flex gap-2 align-items-center">
+          <input class="form-control form-control-sm" style="max-width:220px;"
+                 [(ngModel)]="pendingSearch" (input)="onPendingSearch()"
+                 placeholder="Search SME, email, App ID…">
+          <button class="btn btn-outline-primary btn-sm" (click)="loadPendingDisbursements()">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+      </div>
+
+      @if (loadingPendingDisb()) {
+        <div class="d-flex justify-content-center py-5"><span class="spinner-border text-primary"></span></div>
+      } @else if (pendingDisb().length === 0) {
+        <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2">
+          <i class="bi bi-hourglass" style="font-size:2.5rem;opacity:.25;"></i>
+          <p>No applications are ready to disburse yet.</p>
+          <p class="small">Applications appear here after the Applicant accepts an offer.</p>
+        </div>
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>#App</th>
+                <th>SME</th>
+                <th>Product</th>
+                <th>Applicant</th>
+                <th>Sanctioned Amount</th>
+                <th>Rate</th>
+                <th>EMI/mo</th>
+                <th>Offer Expires</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (p of pgPending.paged(); track p.applicationId) {
+                <tr [class.table-success]="selectedPending()?.applicationId === p.applicationId">
+                  <td class="font-mono fw-bold" style="color:var(--bs-primary);">#{{ p.applicationId }}</td>
+                  <td>
+                    <div class="fw-semibold">{{ p.smeLegalName }}</div>
+                    <div class="text-muted" style="font-size:.72rem;">ID: {{ p.smeId }}</div>
+                  </td>
+                  <td><small>{{ p.productName }}</small></td>
+                  <td><small class="text-muted">{{ p.applicantEmail }}</small></td>
+                  <td class="font-mono fw-bold" style="color:#0d9488;font-size:.95rem;">
+                    {{ formatCurrency(p.sanctionedAmount) }}
+                  </td>
+                  <td class="font-mono">{{ p.interestRate }}%</td>
+                  <td class="font-mono">{{ formatCurrency(p.emiAmount) }}</td>
+                  <td>
+                    @if (p.offerValidUntil) {
+                      <span style="font-size:.78rem;">{{ p.offerValidUntil | slice:0:10 }}</span>
+                    } @else { <span class="text-muted">—</span> }
+                  </td>
+                  <td>
+                    <button class="btn btn-success btn-sm d-flex align-items-center gap-1"
+                            (click)="selectForDisbursal(p)"
+                            title="Disburse this loan">
+                      <i class="bi bi-bank"></i>
+                      Disburse
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-paginator [pg]="pgPending"></app-paginator>
+
+        <!-- Quick info banner -->
+        <div class="d-flex align-items-center gap-2 px-3 py-2 border-top"
+             style="background:#f0fdfa;font-size:.78rem;color:#0f766e;">
+          <i class="bi bi-info-circle-fill"></i>
+          Click <strong>Disburse</strong> on any row to pre-fill the disburse form with that application's details.
+          The sanctioned amount from the accepted offer is applied automatically.
+        </div>
+      }
+    </div>
+  }
+</div>

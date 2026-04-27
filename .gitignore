@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.angular/
+target/
+*.class
+.mvn/
+.gradle/
+bin/
+.settings/
+.classpath
+.project
+.DS_Store
+Thumbs.db

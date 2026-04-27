@@ -1,0 +1,810 @@
+<div class="fade-in">
+
+  <!-- Page Header -->
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+    <div>
+      <h4 class="rp-title h5 fw-bold mb-0"><i class="bi bi-person-badge"></i> Agent Workspace</h4>
+      <p class="text-muted small mt-1">Onboard clients, verify KYC, manage loan applications</p>
+    </div>
+    @if (isReadOnly()) { <span class="readonly-badge"><i class="bi bi-eye-fill"></i> View Only</span> }
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="row g-3 mb-3">
+    <div class="col-sm-3">
+      <div class="stat-card" style="padding:.75rem;">
+        <div class="stat-value" style="color:#d97706;">{{ pendingCount() }}</div>
+        <div class="stat-label">Pending KYC</div>
+      </div>
+    </div>
+    <div class="col-sm-3">
+      <div class="stat-card" style="padding:.75rem;">
+        <div class="stat-value" style="color:#059669;">{{ smesActive() }}</div>
+        <div class="stat-label">Active SMEs</div>
+      </div>
+    </div>
+    <div class="col-sm-3">
+      <div class="stat-card" style="padding:.75rem;">
+        <div class="stat-value" style="color:var(--primary);">{{ appsInReview() }}</div>
+        <div class="stat-label">In Review</div>
+      </div>
+    </div>
+    <div class="col-sm-3">
+      <div class="stat-card" style="padding:.75rem;">
+        <div class="stat-value" style="color:#7c3aed;">{{ appsApproved() }}</div>
+        <div class="stat-label">Approved</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="fs-tab-group mb-3">
+    <button class="fs-tab-btn" [class.active]="tab()==='onboard'" (click)="tab.set('onboard')">
+      <i class="bi bi-building-add me-1"></i>Onboarding
+    </button>
+    <button class="fs-tab-btn" [class.active]="tab()==='queue'" (click)="tab.set('queue')">
+      <i class="bi bi-clock-history me-1"></i>KYC Queue
+      @if (pendingCount() > 0) {
+        <span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;">{{ pendingCount() }}</span>
+      }
+    </button>
+    <button class="fs-tab-btn" [class.active]="tab()==='applications'" (click)="tab.set('applications')">
+      <i class="bi bi-file-earmark-text me-1"></i>All Applications
+    </button>
+  </div>
+
+  <!-- ═══ TAB: ONBOARDING ═══════════════════════════════════════════ -->
+  @if (tab() === 'onboard') {
+    <div class="row g-3">
+
+      <!-- LEFT: SME selector -->
+      <div class="col-lg-8 col-xl-9">
+
+        <!-- SME List Card -->
+        <div class="card mb-3">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="card-title"><i class="bi bi-building"></i> Business Entities ({{ allSmes().length }})</span>
+            @if (!isReadOnly()) {
+              <button class="btn btn-sm btn-outline-primary" (click)="toggleSmeForm()">
+                <i class="bi bi-plus-lg"></i> Register SME
+              </button>
+            }
+          </div>
+
+          <!-- SME Creation Form -->
+          @if (showSmeForm() && !isReadOnly()) {
+            <div style="padding:1rem;background:#f8fafc;border-bottom:1px solid var(--border);">
+              <form [formGroup]="smeForm" (ngSubmit)="saveSme()">
+                <div class="row g-2 mb-2">
+                  <div class="col-md-6">
+                    <label class="form-label">Legal Name *</label>
+                    <input class="form-control" formControlName="legalName" placeholder="Acme Pvt Ltd"
+                           [class.is-invalid]="sf['legalName'].invalid && sf['legalName'].touched">
+                    <div class="invalid-feedback">Required</div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Trade Name</label>
+                    <input class="form-control" formControlName="tradeName" placeholder="Optional">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">Registration No. <small class="text-muted">(Udyam / CIN / LLPIN)</small></label>
+                    <input class="form-control font-mono" formControlName="registrationNo" placeholder="UDYAM-XX-00-0000000">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Business Type *</label>
+                    <select class="form-select" formControlName="businessType">
+                      @for (bt of bizTypes; track bt) { <option [value]="bt">{{ bt }}</option> }
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Industry *</label>
+                    <input class="form-control" formControlName="industry" placeholder="e.g. Retail"
+                           [class.is-invalid]="sf['industry'].invalid && sf['industry'].touched">
+                    <div class="invalid-feedback">Required</div>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">GST No.</label>
+                    <input class="form-control font-mono" formControlName="gstNo" placeholder="29ABCDE1234F1Z5">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">Address *</label>
+                    <textarea class="form-control" formControlName="address" rows="2" placeholder="123, Main St, Chennai"
+                              [class.is-invalid]="sf['address'].invalid && sf['address'].touched"></textarea>
+                    <div class="invalid-feedback">Required</div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:.5rem;">
+                  <button type="submit" class="btn btn-primary btn-sm" [disabled]="savingSme()">
+                    @if (savingSme()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-check2"></i> }
+                    Save SME
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="showSmeForm.set(false)">Cancel</button>
+                </div>
+              </form>
+            </div>
+          }
+
+          <!-- SME Search + List -->
+          <div class="card-body">
+            <div class="search-bar mb-2">
+              <input class="search-input" [(ngModel)]="smeSearch" placeholder="Search by name, industry, GST…"
+                     (input)="searchSmesP()" (keyup.enter)="searchSmesP()">
+              <button class="search-btn" (click)="searchSmesP()"><i class="bi bi-search"></i></button>
+            </div>
+
+            @if (loadingSmes()) { <div class="loading-state" style="padding:1.5rem;"><div class="spinner-border spinner-border-sm text-primary"></div></div> }
+            @else if (!smeSearched()) {
+              <div class="sme-chips">
+                @for (s of allSmes().slice(0,5); track s.smeId) {
+                  <button class="sme-chip" [class.selected]="selectedSme()?.smeId === s.smeId" (click)="selectSme(s)">
+                    <div class="sme-chip-avatar">{{ s.legalName.charAt(0) }}</div>
+                    <div><div class="sme-chip-name">{{ s.legalName }}</div><div class="sme-chip-type">{{ s.businessType }}</div></div>
+                    <span [class]="statusClass(s.status)" style="margin-left:auto;">{{ s.status }}</span>
+                  </button>
+                }
+                @if (allSmes().length === 0) { <div class="text-center text-muted py-3 small">No SMEs yet. Register one above.</div> }
+              </div>
+            } @else if (filteredSmes().length === 0) {
+              <div class="d-flex align-items-center gap-3 p-3 rounded-3 bg-light text-muted"><i class="bi bi-building" style="font-size:2rem;"></i><p>No SMEs match "{{ smeSearch }}"</p></div>
+            } @else {
+              <div class="sme-chips">
+                @for (s of pgSmes.paged(); track s.smeId) {
+                  <button class="sme-chip" [class.selected]="selectedSme()?.smeId === s.smeId" (click)="selectSme(s)">
+                    <div class="sme-chip-avatar">{{ s.legalName.charAt(0) }}</div>
+                    <div><div class="sme-chip-name">{{ s.legalName }}</div><div class="sme-chip-type">{{ s.businessType }} · {{ s.industry }}</div></div>
+                    <span [class]="statusClass(s.status)" style="margin-left:auto;">{{ s.status }}</span>
+                  </button>
+                }
+              </div>
+            }
+
+              <app-paginator [pg]="pgSmes"></app-paginator>
+            </div>
+
+        <!-- Selected SME Workspace -->
+        @if (selectedSme(); as sme) {
+          <!-- Promoters -->
+          <div class="card mb-3">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="card-title"><i class="bi bi-people"></i> Promoters — {{ sme.legalName }}</span>
+              @if (!isReadOnly()) {
+                <button class="btn btn-sm btn-outline-primary" (click)="togglePromoterForm()">
+                  <i class="bi bi-plus-lg"></i> Add
+                </button>
+              }
+            </div>
+            @if (showPromoterForm() && !isReadOnly()) {
+              <div style="padding:.875rem 1rem;background:#f8fafc;border-bottom:1px solid var(--border);">
+                <form [formGroup]="promoterForm" (ngSubmit)="addPromoter()">
+                  <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                      <label class="form-label">Name *</label>
+                      <input class="form-control" formControlName="promoterName" placeholder="Rahul Kumar"
+                             [class.is-invalid]="pf['promoterName'].invalid && pf['promoterName'].touched">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Mobile *</label>
+                      <input class="form-control" formControlName="mobile" placeholder="9876543210"
+                             [class.is-invalid]="pf['mobile'].invalid && pf['mobile'].touched">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Ownership % *</label>
+                      <input type="number" class="form-control" formControlName="ownershipPct" placeholder="100"
+                             [class.is-invalid]="pf['ownershipPct'].invalid && pf['ownershipPct'].touched">
+                    </div>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label">Email <small class="text-muted">(optional)</small></label>
+                    <input type="email" class="form-control" formControlName="email" placeholder="promoter@company.com">
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label">PAN Number</label>
+                    <input class="form-control font-mono" formControlName="panNumber" placeholder="ABCDE1234F"
+                           style="text-transform:uppercase;"
+                           [class.is-invalid]="pf['panNumber'].invalid && pf['panNumber'].touched">
+                    <div class="invalid-feedback">Format: ABCDE1234F</div>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label">Aadhaar Number <small class="text-muted">(12 digits)</small></label>
+                    <input class="form-control font-mono" formControlName="aadhaarNumber" placeholder="123456789012" maxlength="12"
+                           [class.is-invalid]="pf['aadhaarNumber'].invalid && pf['aadhaarNumber'].touched">
+                    <div class="invalid-feedback">Must be 12 digits</div>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label">DIN <small class="text-muted">(optional)</small></label>
+                    <input class="form-control font-mono" formControlName="din" placeholder="00000000">
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label">Date of Birth</label>
+                    <input type="date" class="form-control" formControlName="dateOfBirth">
+                  </div>
+                  <div style="display:flex;gap:.5rem;">
+                    <button type="submit" class="btn btn-success btn-sm" [disabled]="savingPromoter()">
+                      @if (savingPromoter()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-check2"></i> }
+                      Add Promoter
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="showPromoterForm.set(false)">Cancel</button>
+                  </div>
+                </form>
+              </div>
+            }
+            <div class="card-body">
+              @if (promoters().length === 0) {
+                <div class="text-center text-muted py-3 small"><i class="bi bi-people"></i> No promoters added yet.</div>
+              } @else {
+                <div class="promoter-list">
+                  @for (p of promoters(); track p.promoterId) {
+                    <div class="promoter-row">
+                      <div class="promoter-avatar">{{ p.promoterName.charAt(0) }}</div>
+                      <div style="flex:1;">
+                        <div class="promoter-name">{{ p.promoterName }}</div>
+                        <div class="promoter-meta">{{ p.mobile }} · {{ p.ownershipPct }}% ownership</div>
+                      </div>
+                      <span [class]="statusClass(p.kycStatus)">{{ p.kycStatus }}</span>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- KYC -->
+          <div class="card mb-3">
+            <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-person-vcard"></i> KYC Records</span></div>
+            <div class="card-body">
+              @if (!isReadOnly()) {
+                <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:.875rem;margin-bottom:.875rem;">
+                  <p style="font-size:.82rem;font-weight:600;margin-bottom:.5rem;"><i class="bi bi-plus-circle me-1 text-primary"></i>Submit KYC for this SME</p>
+                  <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                      <label class="form-label">Promoter ID <span style="color:var(--text-muted);">(optional)</span></label>
+                      <input type="number" class="form-control form-control-sm font-mono" [(ngModel)]="kycPromoterIdInput" placeholder="0 = none">
+                      <div class="form-text">ID of the promoter linked to this KYC</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Applicant User ID <span style="color:var(--text-muted);">(optional)</span></label>
+                      <input type="number" class="form-control form-control-sm font-mono" [(ngModel)]="kycApplicantIdInput" placeholder="0 = current user">
+                      <div class="form-text">Leave 0 to link to yourself</div>
+                    </div>
+                    <div class="col-md-4" style="display:flex;align-items:flex-end;">
+                      <button class="btn btn-primary btn-sm w-100" (click)="submitKyc()" [disabled]="creatingKyc()"
+                              title="Initialize KYC for the latest application of this SME">
+                        @if (creatingKyc()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-send"></i> }
+                        Submit KYC
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              }
+              @if (kycRecords().length === 0) {
+                <div class="text-center text-muted py-3 small">No KYC records for this SME.</div>
+              } @else {
+                <div class="kyc-list">
+                  @for (k of kycRecords(); track k.kycId) {
+                    <div class="kyc-row">
+                      <span class="kyc-id font-mono">#{{ k.kycId }}</span>
+                      <span class="kyc-meta">
+                        @if (k.promoters?.[0]) { Promoter: {{ k.promoters?.[0]?.promoterName }} · }
+                        @if (k.applicantFullName) { Applicant: {{ k.applicantFullName }} }
+                      </span>
+                      <span [class]="statusClass(k.verificationStatus)">{{ k.verificationStatus }}</span>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- Loan Applications -->
+          <div class="card mb-3">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="card-title"><i class="bi bi-file-earmark-text"></i> Applications — {{ sme.legalName }}</span>
+              @if (!isReadOnly()) {
+                <button class="btn btn-sm btn-outline-primary" (click)="toggleAppForm()">
+                  <i class="bi bi-plus-lg"></i> New Application
+                </button>
+              }
+            </div>
+            @if (showAppForm() && !isReadOnly()) {
+              <div style="padding:.875rem 1rem;background:#f8fafc;border-bottom:1px solid var(--border);">
+                <form [formGroup]="appForm" (ngSubmit)="createApp()">
+                  <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                      <label class="form-label">Loan Product *</label>
+                      <select class="form-select" formControlName="productId"
+                              [class.is-invalid]="af['productId'].invalid && af['productId'].touched">
+                        <option [value]="null">-- Select --</option>
+                        @for (p of products(); track p.productId) {
+                          <option [value]="p.productId">{{ p.productName }} — {{ p.baseInterestRate }}%</option>
+                        }
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Amount (₹) *</label>
+                      <input type="number" class="form-control font-mono" formControlName="requestedAmount" placeholder="500000"
+                             [class.is-invalid]="af['requestedAmount'].invalid && af['requestedAmount'].touched">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Tenor (months) *</label>
+                      <input type="number" class="form-control" formControlName="tenorMonths" placeholder="12"
+                             [class.is-invalid]="af['tenorMonths'].invalid && af['tenorMonths'].touched">
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label">Purpose</label>
+                      <textarea class="form-control" formControlName="purposeNote" rows="2" placeholder="Briefly describe the loan purpose…"></textarea>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:.5rem;">
+                    <button type="submit" class="btn btn-primary btn-sm" [disabled]="creatingApp()">
+                      @if (creatingApp()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-file-earmark-plus"></i> }
+                      Create Application
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" (click)="showAppForm.set(false)">Cancel</button>
+                  </div>
+                </form>
+              </div>
+            }
+            <div class="card-body">
+              @if (smeApps().length === 0) {
+                <div class="text-center text-muted py-3 small">No loan applications for this SME yet.</div>
+              } @else {
+                @for (app of smeApps(); track app.applicationId) {
+                  <div class="app-row">
+                    <div class="app-row-left">
+                      <span class="app-id">#{{ app.applicationId }}</span>
+                      <div>
+                        <div class="app-info">₹{{ app.requestedAmount | number:'1.0-0' }} · {{ app.tenorMonths }} mo</div>
+                        <div class="app-product">{{ app.productName }}</div>
+                      </div>
+                    </div>
+                    <div class="app-row-right">
+                      <span [class]="statusClass(app.status)" style="font-size:.7rem;">{{ fmtStatus(app.status) }}</span>
+                      <button class="btn btn-outline-secondary btn-sm" (click)="openDocs(app)" title="Documents">
+                        <i class="bi bi-paperclip"></i>
+                      </button>
+                      @if (canSubmit(app)) {
+                        <button class="btn btn-sm btn-primary" (click)="submitApp(app)"
+                                [disabled]="submittingApp() === app.applicationId">
+                          @if (submittingApp() === app.applicationId) { <span class="spinner-border spinner-border-sm"></span> }
+                          @else { <i class="bi bi-send"></i> }
+                          Submit
+                        </button>
+                      }
+                    </div>
+                  </div>
+
+                  <!-- Document panel for this app -->
+                  @if (selectedAppForDocs()?.applicationId === app.applicationId) {
+                    <div style="margin:.5rem 0 .75rem;padding:.875rem;background:#f8fafc;border:1px solid var(--border);border-radius:8px;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+                        <strong style="font-size:.82rem;"><i class="bi bi-paperclip me-1"></i>Documents — App #{{ app.applicationId }}</strong>
+                        @if (!isReadOnly()) {
+                          <div style="display:flex;gap:.35rem;">
+                            <button class="btn btn-outline-primary btn-sm" [class.active]="docUploadMode==='file'" (click)="docUploadMode='file'">PDF Upload</button>
+                            <button class="btn btn-outline-secondary btn-sm" [class.active]="docUploadMode==='uri'" (click)="docUploadMode='uri'">URL Link</button>
+                          </div>
+                        }
+                      </div>
+                      @if (!isReadOnly()) {
+                        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem;">
+                          <div>
+                            <label class="form-label">Doc Type</label>
+                            <select class="form-select form-select-sm" [(ngModel)]="selectedDocType">
+                              @for (d of kycDocMeta; track d.type) {
+                                <option [value]="d.type">{{ d.label }}</option>
+                              }
+                              <option value="OTHER">Other</option>
+                            </select>
+                          </div>
+                          @if (applicantCreatedApp()) {
+                            <div class="alert border-0 d-flex gap-2 rounded-3 mb-2"
+                                 style="background:#fffbeb;border-left:4px solid #f59e0b !important;font-size:.8rem;">
+                              <i class="bi bi-lock-fill mt-1" style="color:#d97706;"></i>
+                              <div>
+                                <strong>Read-only.</strong>
+                                This application was created by the Applicant.
+                                Only the Applicant can upload documents.
+                                <button class="btn btn-outline-warning btn-sm ms-2" style="font-size:.72rem;"
+                                        (click)="notifyApplicant()">
+                                  <i class="bi bi-bell me-1"></i>Notify Applicant
+                                </button>
+                              </div>
+                            </div>
+                          }
+                          @if (!applicantCreatedApp()) {
+                            @if (docUploadMode === 'file') {
+                              <div style="flex:1;min-width:180px;">
+                                <label class="form-label">File (PDF/Image)</label>
+                                <input id="agentDocFile" type="file" class="form-control form-control-sm" accept="application/pdf,image/*" (change)="onFileSelected($event)">
+                              </div>
+                            } @else {
+                              <div style="flex:1;min-width:180px;">
+                                <label class="form-label">External URL</label>
+                                <input class="form-control form-control-sm" [(ngModel)]="docUriInput" placeholder="https://…">
+                              </div>
+                            }
+                            <button class="btn btn-primary btn-sm" (click)="uploadDoc()" [disabled]="uploadingDoc()">
+                              @if (uploadingDoc()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-upload"></i> }
+                              Upload
+                            </button>
+                          }
+                        </div>
+                      }
+
+                      <!-- ── Financial Doc Slots (one per DocType, re-uploadable) ── -->
+                      <div class="doc-slot-grid">
+                        @for (meta of financialDocMeta; track meta.type) {
+                          <div class="doc-slot" [class.uploaded]="!!getAppDocByType(meta.type)">
+                            <div class="doc-slot-info">
+                              <i class="bi" [class]="getAppDocByType(meta.type) ? 'bi-file-earmark-check-fill text-success' : 'bi-file-earmark text-muted'"></i>
+                              <div>
+                                <div class="doc-slot-label">{{ meta.label }}</div>
+                                @if (getAppDocByType(meta.type)) {
+                                  <div class="doc-slot-filename">{{ getAppDocByType(meta.type)!.fileName || 'URL linked' }}</div>
+                                  @if (getAppDocByType(meta.type)!.lastReplacedDate) {
+                                    <div class="doc-slot-replaced">Replaced {{ getAppDocByType(meta.type)!.lastReplacedDate | date:'dd MMM yyyy' }}</div>
+                                  }
+                                } @else {
+                                  <div class="doc-slot-hint">{{ meta.hint }}</div>
+                                }
+                              </div>
+                            </div>
+                            <div class="doc-slot-actions">
+                              @if (getAppDocByType(meta.type)?.downloadUrl) {
+                                <a class="btn btn-outline-secondary btn-xs" [href]="getAppDocByType(meta.type)!.downloadUrl" target="_blank" title="View">
+                                  <i class="bi bi-eye"></i>
+                                </a>
+                              }
+                              @if (!isReadOnly() && !applicantCreatedApp()) {
+                                <label class="btn btn-xs" [class]="getAppDocByType(meta.type) ? 'btn-outline-warning' : 'btn-primary'" [title]="getAppDocByType(meta.type) ? 'Re-upload' : 'Upload'">
+                                  <i class="bi" [class]="getAppDocByType(meta.type) ? 'bi-pencil' : 'bi-upload'"></i>
+                                  {{ getAppDocByType(meta.type) ? 'Edit' : 'Upload' }}
+                                  <input type="file" class="d-none" accept="application/pdf,image/*"
+                                         (change)="onSlotFileSelected($event, meta.type)">
+                                </label>
+                              }
+                            </div>
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  }
+                }
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- RIGHT SIDEBAR: checklist -->
+      <div class="col-lg-4 col-xl-3">
+        <div class="card p-3 border-0 shadow-sm">
+          <div class="fw-bold text-uppercase text-primary mb-2" style="font-size:.7rem;letter-spacing:.5px;font-family:var(--fs-font-head);">Onboarding Checklist</div>
+          <div class="sc-steps">
+            <div class="sc-step" [class.complete]="!!selectedSme()">
+              <i class="bi" [class.bi-check-circle-fill]="!!selectedSme()" [class.bi-circle]="!selectedSme()"></i>
+              Select / Register SME
+            </div>
+            <div class="sc-step" [class.complete]="promoters().length > 0">
+              <i class="bi" [class.bi-check-circle-fill]="promoters().length > 0" [class.bi-circle]="promoters().length === 0"></i>
+              Add Promoters
+            </div>
+            <div class="sc-step" [class.complete]="kycRecords().length > 0">
+              <i class="bi" [class.bi-check-circle-fill]="kycRecords().length > 0" [class.bi-circle]="kycRecords().length === 0"></i>
+              Submit KYC
+            </div>
+            <div class="sc-step" [class.complete]="smeApps().length > 0">
+              <i class="bi" [class.bi-check-circle-fill]="smeApps().length > 0" [class.bi-circle]="smeApps().length === 0"></i>
+              Create Loan Application
+            </div>
+          </div>
+          @if (selectedSme()) {
+            <div class="mt-3">
+              <div class="summary-stat"><span>SME</span><strong>{{ selectedSme()!.legalName }}</strong></div>
+              <div class="summary-stat"><span>Promoters</span><strong>{{ promoters().length }}</strong></div>
+              <div class="summary-stat"><span>KYC Records</span><strong>{{ kycRecords().length }}</strong></div>
+              <div class="summary-stat"><span>Applications</span><strong>{{ smeApps().length }}</strong></div>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+    </div>
+  }
+
+  <!-- ═══ TAB: KYC QUEUE ════════════════════════════════════════════ -->
+  @if (tab() === 'queue') {
+    <div class="card">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span class="card-title"><i class="bi bi-person-vcard text-warning"></i> Pending KYC Queue ({{ pendingKyc().length }})</span>
+        <button class="btn btn-outline-secondary btn-sm" (click)="loadQueue()" [disabled]="loadingQueue()">
+          <i class="bi bi-arrow-clockwise" [class.spin]="loadingQueue()"></i> Refresh
+        </button>
+      </div>
+      @if (loadingQueue()) {
+        <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div>
+      } @else if (pendingKyc().length === 0) {
+        <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2"><i class="bi bi-check-circle text-success" style="font-size:2.5rem;"></i><p>All KYC records are verified!</p></div>
+      } @else {
+        <div class="table-responsive">
+          <table class="table">
+            <thead><tr><th>KYC #</th><th>SME</th><th>Promoter</th><th>Applicant</th><th>Status</th><th>Details</th><th>Action</th></tr></thead>
+            <tbody>
+              @for (k of pgQueue.paged(); track k.kycId) {
+                <tr>
+                  <td class="font-mono" style="color:var(--primary);font-weight:700;">#{{ k.kycId }}</td>
+                  <td>{{ k.smeLegalName || '#'+k.smeId }}</td>
+                  <td style="font-size:.8rem;color:var(--text-muted);">{{ k.promoters?.[0]?.promoterName || '—' }}</td>
+                  <td style="font-size:.8rem;color:var(--text-muted);">{{ k.applicantFullName || '—' }}</td>
+                  <td><span [class]="statusClass(k.verificationStatus)">{{ k.verificationStatus }}</span></td>
+                  <td>
+                    <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
+                      @if (k.smeId) {
+                        <button class="drill-btn" [class.active]="isDrillOpen(k.kycId,'sme')" (click)="openDrill(k,'sme')">
+                          <i class="bi bi-building"></i> SME
+                        </button>
+                      }
+                      @if (k.mainPromoterId) {
+                        <button class="drill-btn" [class.active]="isDrillOpen(k.kycId,'promoter')" (click)="openDrill(k,'promoter')">
+                          <i class="bi bi-person"></i> Promoter
+                        </button>
+                      }
+                      <button class="drill-btn" [class.active]="selectedKycForDocs()?.kycId===k.kycId" (click)="loadKycDocs(k)">
+                        <i class="bi bi-paperclip"></i> KYC Docs
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    @if (!isReadOnly()) {
+                      <div style="display:flex;gap:.35rem;">
+                        <button class="btn-verify" (click)="openAction(k,'verify')"><i class="bi bi-check2-all"></i> Verify</button>
+                        <button class="btn-reject" (click)="openAction(k,'reject')"><i class="bi bi-x-lg"></i> Reject</button>
+                      </div>
+                    } @else {
+                      <span class="readonly-badge"><i class="bi bi-eye-fill"></i></span>
+                    }
+                  </td>
+                </tr>
+                @if (isDrillOpen(k.kycId, 'sme') && drillSme()) {
+                  <tr><td colspan="7"><div class="drill-panel drill-sme">
+                    <div class="drill-grid">
+                      <div class="drill-field"><label>SME ID</label><span class="font-mono">#{{ drillSme()!.smeId }}</span></div>
+                      <div class="drill-field"><label>Legal Name</label><span>{{ drillSme()!.legalName }}</span></div>
+                      <div class="drill-field"><label>Industry</label><span>{{ drillSme()!.industry }}</span></div>
+                      <div class="drill-field"><label>Type</label><span>{{ drillSme()!.businessType }}</span></div>
+                      <div class="drill-field"><label>GST</label><span class="font-mono">{{ drillSme()!.gstNo || '—' }}</span></div>
+                      <div class="drill-field"><label>Status</label><span [class]="statusClass(drillSme()!.status)">{{ drillSme()!.status }}</span></div>
+                    </div>
+                  </div></td></tr>
+                }
+                @if (isDrillOpen(k.kycId, 'promoter') && drillPromoter()) {
+                  <tr><td colspan="7"><div class="drill-panel drill-promoter">
+                    <div class="drill-grid">
+                      <div class="drill-field"><label>Name</label><span>{{ drillPromoter()!.promoterName }}</span></div>
+                      <div class="drill-field"><label>Mobile</label><span class="font-mono">{{ drillPromoter()!.mobile }}</span></div>
+                      <div class="drill-field"><label>Ownership</label><span>{{ drillPromoter()!.ownershipPct }}%</span></div>
+                      <div class="drill-field"><label>KYC Status</label><span [class]="statusClass(drillPromoter()!.kycStatus)">{{ drillPromoter()!.kycStatus }}</span></div>
+                    </div>
+                  </div></td></tr>
+                }
+
+                <!-- KYC Document Checklist Drill Panel -->
+                @if (selectedKycForDocs()?.kycId === k.kycId) {
+                  <tr><td colspan="7">
+                    <div class="drill-panel" style="background:var(--primary-lt);border-left:3px solid var(--primary);padding:1rem 1.25rem;">
+
+                      <!-- Header -->
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.875rem;">
+                        <div style="font-size:.82rem;font-weight:700;color:var(--primary-dk);">
+                          <i class="bi bi-person-vcard me-1"></i>KYC Identity Documents — {{ k.smeLegalName || 'SME #'+k.smeId }}
+                        </div>
+                        <span class="badge-status" [class.bs-uw_approved]="kycDocs().length>=kycDocMeta.length"
+                              [class.bs-pending]="kycDocs().length>0 && kycDocs().length<kycDocMeta.length"
+                              [class.bs-uw_rejected]="kycDocs().length===0" style="font-size:.68rem;">
+                          {{ kycDocs().length }} / {{ kycDocMeta.length }} docs
+                        </span>
+                      </div>
+
+                      @if (loadingKycDocs()) {
+                        <div style="display:flex;gap:.5rem;align-items:center;color:var(--text-muted);font-size:.8rem;padding:.5rem 0;">
+                          <span class="spinner-border spinner-border-sm"></span> Loading documents…
+                        </div>
+                      } @else {
+
+                        <!-- Document Checklist Grid -->
+                        <div class="kyc-doc-grid">
+                          @for (meta of kycDocMeta; track meta.type) {
+                            <div class="kyc-doc-card" [class.found]="hasKycDoc(meta.type)">
+                              <div class="kyc-doc-card-header">
+                                <i class="bi" [class.bi-check-circle-fill]="hasKycDoc(meta.type)"
+                                   [class.bi-exclamation-circle]="!hasKycDoc(meta.type)"
+                                   [style.color]="hasKycDoc(meta.type)?'var(--success)':'var(--warning)'"></i>
+                                <span class="kyc-doc-card-title">{{ meta.label }}</span>
+                              </div>
+                              <div class="kyc-doc-card-hint">{{ meta.hint }}</div>
+                              @if (hasKycDoc(meta.type)) {
+                                @for (doc of kycDocs(); track doc.documentId) {
+                                  @if (doc.docType === meta.type) {
+                                    <div style="display:flex;gap:.3rem;margin-top:.5rem;flex-wrap:wrap;">
+                                      <button class="btn btn-outline-primary btn-sm" style="font-size:.7rem;" (click)="openPreview(doc)">
+                                        <i class="bi bi-eye"></i> Preview
+                                      </button>
+                                      @if (doc.downloadUrl) {
+                                        <button class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;" (click)="downloadDoc(doc)">
+                                          <i class="bi bi-download"></i>
+                                        </button>
+                                      }
+                                    </div>
+                                    <div style="font-size:.68rem;color:var(--text-muted);margin-top:.3rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                      {{ doc.fileName || doc.fileUri || 'Document' }}
+                                    </div>
+                                  }
+                                }
+                              } @else {
+                                <div style="font-size:.7rem;color:var(--warning);margin-top:.4rem;">
+                                  <i class="bi bi-exclamation-triangle me-1"></i>Missing
+                                </div>
+                              }
+                            </div>
+                          }
+                        </div>
+
+                        <!-- Upload Strip (only if agent has write access and there is an app to upload to) -->
+                        @if (!isReadOnly() && kycUploadAppId) {
+                          <div style="margin-top:1rem;padding:.875rem;background:rgba(255,255,255,.7);border:1px solid var(--border);border-radius:8px;">
+                            <p style="font-size:.75rem;font-weight:700;color:var(--primary-dk);margin-bottom:.6rem;">
+                              <i class="bi bi-upload me-1"></i>Upload Missing KYC Document — App #{{ kycUploadAppId }}
+                            </p>
+                            <div style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;">
+                              <div>
+                                <label class="form-label">Document Type</label>
+                                <select class="form-select form-select-sm" [(ngModel)]="kycUploadType" style="min-width:180px;">
+                                  @for (d of kycDocMeta; track d.type) {
+                                    <option [value]="d.type">{{ d.label }}</option>
+                                  }
+                                  <option value="OTHER">Other</option>
+                                </select>
+                              </div>
+                              <div style="display:flex;gap:.35rem;">
+                                <button class="btn btn-outline-primary btn-sm" [class.active]="kycUploadMode==='file'" (click)="kycUploadMode='file'">File</button>
+                                <button class="btn btn-outline-secondary btn-sm" [class.active]="kycUploadMode==='uri'" (click)="kycUploadMode='uri'">URL</button>
+                              </div>
+                              @if (kycUploadMode === 'file') {
+                                <div style="flex:1;min-width:180px;">
+                                  <label class="form-label">PDF / Image</label>
+                                  <input type="file" class="form-control form-control-sm" accept="application/pdf,image/*" (change)="onKycFileSelect($event)">
+                                </div>
+                              } @else {
+                                <div style="flex:1;min-width:180px;">
+                                  <label class="form-label">Document URL</label>
+                                  <input class="form-control form-control-sm" [(ngModel)]="kycUploadUri" placeholder="https://…">
+                                </div>
+                              }
+                              <button class="btn btn-primary btn-sm" (click)="uploadKycDoc()" [disabled]="kycUploading()">
+                                @if (kycUploading()) { <span class="spinner-border spinner-border-sm"></span> }
+                                @else { <i class="bi bi-upload"></i> }
+                                Upload
+                              </button>
+                            </div>
+                          </div>
+                        }
+                      }
+                    </div>
+                  </td></tr>
+                }
+              }
+            </tbody>
+          </table>
+            <app-paginator [pg]="pgQueue"></app-paginator>
+        </div>
+      }
+    </div>
+
+    <!-- Verify/Reject Modal -->
+    @if (actionKyc()) {
+      <div class="modal-backdrop-overlay" (click)="actionKyc.set(null)"></div>
+      <div class="modal-dialog-box">
+        <div class="mdb-header">
+          <span class="mdb-title">
+            <i class="bi" [class.bi-check2-all]="actionType()==='verify'" [class.bi-x-circle]="actionType()==='reject'"></i>
+            {{ actionType() === 'verify' ? 'Verify' : 'Reject' }} KYC #{{ actionKyc()!.kycId }}
+          </span>
+          <button class="btn-icon" (click)="actionKyc.set(null)"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="mdb-body">
+          <label class="form-label">Notes <span style="color:var(--text-muted);">(optional)</span></label>
+          <textarea class="form-control" [(ngModel)]="actionNotes" rows="3" placeholder="Add verification notes…"></textarea>
+        </div>
+        <div class="mdb-footer">
+          <button class="btn btn-outline-secondary" (click)="actionKyc.set(null)">Cancel</button>
+          <button class="btn" [class]="actionType()==='verify' ? 'btn-success' : 'btn-danger'"
+                  (click)="doAction()" [disabled]="acting()">
+            @if (acting()) { <span class="spinner-border spinner-border-sm"></span> }
+            @else { <i class="bi" [class.bi-check2-all]="actionType()==='verify'" [class.bi-x-lg]="actionType()==='reject'"></i> }
+            {{ actionType() === 'verify' ? 'Confirm Verify' : 'Confirm Reject' }}
+          </button>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- ═══ TAB: ALL APPLICATIONS ═════════════════════════════════════ -->
+  @if (tab() === 'applications') {
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-file-earmark-text"></i> All Applications</span></div>
+      <div class="card-body">
+        <div class="search-bar mb-3">
+          <input class="search-input" [(ngModel)]="appSearch" placeholder="Search by App ID, SME name, status…"
+               (input)="searchAppsP()" (keyup.enter)="searchAppsP()">
+          <button class="search-btn" (click)="searchAppsP()"><i class="bi bi-search"></i> Search</button>
+        </div>
+
+        @if (loadingApps()) {
+          <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div>
+        } @else if (!appSearched()) {
+          <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2"><i class="bi bi-search" style="font-size:2rem;opacity:.3;"></i><p>Enter a search term to find applications</p></div>
+        } @else if (filteredApps().length === 0) {
+          <div class="d-flex align-items-center gap-3 p-3 rounded-3 bg-light text-muted"><i class="bi bi-file-earmark-x" style="font-size:2rem;"></i><p>No applications match "{{ appSearch }}"</p></div>
+        } @else {
+          <div class="table-responsive">
+            <table class="table">
+              <thead><tr><th>App #</th><th>SME</th><th>Amount</th><th>Tenor</th><th>Status</th><th>Docs</th></tr></thead>
+              <tbody>
+                @for (a of pgApps.paged(); track a.applicationId) {
+                  <tr class="tbl-row-hover">
+                    <td class="font-mono" style="color:var(--primary);font-weight:700;">#{{ a.applicationId }}</td>
+                    <td><strong>{{ a.smeLegalName || 'SME #'+a.smeId }}</strong></td>
+                    <td class="font-mono">₹{{ a.requestedAmount | number:'1.0-0' }}</td>
+                    <td>{{ a.tenorMonths }} mo</td>
+                    <td><span [class]="statusClass(a.status)">{{ fmtStatus(a.status) }}</span></td>
+                    <td>
+                      <button class="btn btn-outline-secondary btn-sm" (click)="viewAppDetail(a)">
+                        <i class="bi bi-paperclip"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  @if (viewedApp()?.applicationId === a.applicationId) {
+                    <tr><td colspan="6">
+                      <div style="padding:.75rem;background:#f8fafc;border-radius:6px;">
+                        @if (viewedDocs().length === 0) {
+                          <div class="text-center text-muted py-3 small">No documents for this application.</div>
+                        } @else {
+                          <div class="doc-list">
+                            @for (d of viewedDocs(); track d.documentId) {
+                              <div class="doc-row">
+                                <i class="bi bi-file-earmark-pdf doc-icon text-danger"></i>
+                                <div class="doc-info">
+                                  <div class="doc-name">{{ d.fileName || d.fileUri }}</div>
+                                  <div class="doc-meta">{{ d.docType }}{{ d.contentType ? " · " + d.contentType : "" }}</div>
+                                </div>
+                                @if (d.downloadUrl) {
+                                  <div style="display:flex;gap:.3rem;">
+                                    <button class="btn btn-outline-primary btn-sm" (click)="openPreview(d)" title="Preview">
+                                      <i class="bi bi-eye"></i>
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" (click)="downloadDoc(d)" title="Download">
+                                      <i class="bi bi-download"></i>
+                                    </button>
+                                  </div>
+                                }
+                              </div>
+                            }
+                          </div>
+                        }
+                      </div>
+                    </td></tr>
+                  }
+                }
+              </tbody>
+            </table>
+            <app-paginator [pg]="pgApps"></app-paginator>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+
+<!-- Document Preview Modal -->
+<app-doc-preview [docData]="previewDoc()" (closed)="closePreview()"></app-doc-preview>

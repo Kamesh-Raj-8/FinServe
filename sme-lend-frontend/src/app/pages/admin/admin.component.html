@@ -1,0 +1,530 @@
+<div class="fade-in">
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+    <h4><i class="bi bi-shield-lock"></i> Administration</h4>
+    <p>Manage system users and loan products · Monitor all role data (read-only)</p>
+  </div>
+
+  @if (alertMsg()) {
+    <div class="alert mb-3" [class]="'alert-' + alertType()">
+      <i class="bi me-2" [class.bi-check-circle-fill]="alertType()==='success'" [class.bi-exclamation-triangle-fill]="alertType()==='danger'"></i>
+      {{ alertMsg() }}
+    </div>
+  }
+
+  <div class="fs-tab-group mb-3">
+    <button class="fs-tab-btn" [class.active]="tab()===0" (click)="setTab(0)">
+      <i class="bi bi-people me-1"></i>Users
+      <span class="badge-status bs-draft ms-1" style="font-size:.6rem;">{{ users().length }}</span>
+    </button>
+    <button class="fs-tab-btn" [class.active]="tab()===1" (click)="setTab(1)">
+      <i class="bi bi-box-seam me-1"></i>Loan Products
+      <span class="badge-status bs-draft ms-1" style="font-size:.6rem;">{{ products().length }}</span>
+    </button>
+    <button class="fs-tab-btn" [class.active]="tab()===2" (click)="setTab(2)">
+      <i class="bi bi-eye me-1"></i>Monitor
+      <span class="badge-status bs-pending ms-1" style="font-size:.6rem;">READ-ONLY</span>
+    </button>
+    <button class="fs-tab-btn" [class.active]="tab()===3" (click)="setTab(3);loadPolicies()">
+      <i class="bi bi-shield-check me-1"></i>Eligibility
+      <span class="badge-status bs-draft ms-1" style="font-size:.6rem;">{{ policies().length }}</span>
+    </button>
+    <button class="fs-tab-btn" [class.active]="tab()===4" (click)="setTab(4);loadFees()">
+      <i class="bi bi-cash-coin me-1"></i>Fees
+      <span class="badge-status bs-draft ms-1" style="font-size:.6rem;">{{ fees().length }}</span>
+    </button>
+  </div>
+
+  <!-- ══ TAB 0: USERS ══ -->
+  @if (tab() === 0) {
+    <div class="row g-3">
+      <!-- User List -->
+      <div class="col-lg-8">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-people"></i> System Users</span>
+            <input class="form-control form-control-sm w-auto" 
+                   [(ngModel)]="userSearch" (input)="onUserSearch()"
+                   placeholder="Search users…" style="min-width:200px;">
+            <button class="btn btn-sm btn-outline-primary" (click)="loadUsers()"><i class="bi bi-arrow-clockwise"></i></button>
+          </div>
+          @if (loadingUsers()) { <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div> }
+          @else if (users().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2"><i class="bi bi-people"></i><p>No users found</p></div> }
+          @else {
+            <div class="table-responsive">
+              <table class="table">
+                <thead><tr><th>#</th><th>Full Name</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>
+                  @for (u of pgUsers.paged(); track u.userId) {
+                    <tr>
+                      <td class="font-mono" style="color:var(--primary);">#{{ u.userId }}</td>
+                      <td><strong>{{ u.fullName }}</strong></td>
+                      <td style="font-size:.8rem;">{{ u.email }}</td>
+                      <td><span [class]="badgeClass(u.role.toLowerCase())">{{ u.role }}</span></td>
+                      <td><span [class]="badgeClass(u.status)">{{ u.status }}</span></td>
+                      <td>
+                        <button class="btn btn-sm"
+                          [class]="u.status === 'ACTIVE' ? 'btn-outline-danger' : 'btn-outline-success'"
+                          (click)="toggleUserStatus(u)">
+                          <i class="bi" [class.bi-pause-circle]="u.status === 'ACTIVE'" [class.bi-play-circle]="u.status !== 'ACTIVE'"></i>
+                          {{ u.status === 'ACTIVE' ? 'Deactivate' : 'Activate' }}
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+                </table>
+              </div>
+              <app-paginator [pg]="pgUsers"></app-paginator>
+            }
+          </div>
+      </div>
+
+      <!-- Create User Form -->
+      <div class="col-lg-4">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-person-plus"></i> Add Staff User</span></div>
+          <div class="card-body">
+            <form [formGroup]="userForm" (ngSubmit)="createUser()">
+              <div class="mb-2"><label class="form-label">Full Name *</label>
+                <input class="form-control" formControlName="fullName" [class.is-invalid]="uf['fullName'].invalid && uf['fullName'].touched">
+                <div class="invalid-feedback">Required</div></div>
+              <div class="mb-2"><label class="form-label">Email *</label>
+                <input type="email" class="form-control" formControlName="email" [class.is-invalid]="uf['email'].invalid && uf['email'].touched">
+                <div class="invalid-feedback">Valid email required</div></div>
+              <div class="mb-2"><label class="form-label">Password *</label>
+                <input type="password" class="form-control" formControlName="password" [class.is-invalid]="uf['password'].invalid && uf['password'].touched">
+                <div class="invalid-feedback">Min 6 characters</div></div>
+              <div class="mb-2"><label class="form-label">Phone</label>
+                <input class="form-control" formControlName="phone" placeholder="Optional"></div>
+              <div class="mb-2"><label class="form-label">Role *</label>
+                <select class="form-select" formControlName="role">
+                  @for (r of allowedRoles; track r) { <option [value]="r">{{ r }}</option> }
+                </select></div>
+              <div class="mb-2"><label class="form-label">Bank Account No</label>
+                <input class="form-control font-mono" formControlName="bankAccountNo" placeholder="Optional"></div>
+              <div class="mb-3"><label class="form-label">IFSC</label>
+                <input class="form-control font-mono" formControlName="ifsc" placeholder="Optional"></div>
+              <button type="submit" class="btn btn-primary w-100" [disabled]="creatingUser()">
+                @if (creatingUser()) { <span class="spinner-border spinner-border-sm"></span> Creating… }
+                @else { <i class="bi bi-person-plus"></i> Create User }
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ══ TAB 1: LOAN PRODUCTS ══ -->
+  @if (tab() === 1) {
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-box-seam"></i> Loan Products</span>
+            <input class="form-control form-control-sm w-auto"
+                   [(ngModel)]="productSearch" (input)="onProductSearch()"
+                   placeholder="Search products…" style="min-width:180px;"></div>
+          @if (products().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2"><i class="bi bi-box-seam"></i><p>No products yet</p></div> }
+          @else {
+            <div class="table-responsive">
+              <table class="table">
+                <thead><tr><th>#</th><th>Name</th><th>Amount Range</th><th>Tenor</th><th>Rate</th><th>Min CIBIL</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>
+                  @for (p of pgProducts.paged(); track p.productId) {
+                    <tr [class.table-secondary]="p.status !== 'ACTIVE'"
+                        [style.opacity]="p.status !== 'ACTIVE' ? '0.5' : '1'">
+                      <td class="font-mono" style="color:var(--primary);">#{{ p.productId }}</td>
+                      <td><strong>{{ p.productName }}</strong></td>
+                      <td style="font-size:.8rem;">₹{{ p.minAmount | number }} – {{ p.maxAmount | number }}</td>
+                      <td style="font-size:.8rem;">{{ p.minTenorMonths }}–{{ p.maxTenorMonths }} mo</td>
+                      <td class="font-mono">{{ p.baseInterestRate }}%</td>
+                      <td style="font-size:.8rem;">
+                        @if (p.creditThreshold) {
+                          <span class="badge-status bs-pending">{{ p.creditThreshold }}+</span>
+                        } @else { <span style="color:var(--text-light);">—</span> }
+                      </td>
+                      <td><span [class]="badgeClass(p.status)">{{ p.status }}</span></td>
+                      <td>
+                        <div style="display:flex;gap:.35rem;">
+                          <button class="btn btn-outline-primary btn-sm" (click)="openEdit(p)"><i class="bi bi-pencil"></i></button>
+                          <button class="btn btn-sm" [class]="p.status==='ACTIVE'?'btn-outline-warning':'btn-outline-success'" (click)="toggleProductStatus(p)">
+                            <i class="bi" [class.bi-pause]="p.status==='ACTIVE'" [class.bi-play]="p.status!=='ACTIVE'"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+                </table>
+              </div>
+              <app-paginator [pg]="pgProducts"></app-paginator>
+            }
+          </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2">{{ editingProduct() ? 'Edit Product' : 'New Product' }}</span>
+            @if (editingProduct()) { <button class="btn btn-sm btn-outline-secondary" (click)="cancelEdit()">Cancel</button> }
+          </div>
+          <div class="card-body">
+            <form [formGroup]="productForm" (ngSubmit)="editingProduct() ? saveEdit() : createProduct()">
+              <div class="mb-2"><label class="form-label">Product Name *</label>
+                <input class="form-control" formControlName="productName" [class.is-invalid]="pf['productName'].invalid && pf['productName'].touched">
+                <div class="invalid-feedback">Required</div></div>
+              <div class="row g-2 mb-2">
+                <div class="col"><label class="form-label">Min Amount *</label>
+                  <input type="number" class="form-control" formControlName="minAmount" [class.is-invalid]="pf['minAmount'].invalid && pf['minAmount'].touched">
+                  <div class="invalid-feedback">Required</div></div>
+                <div class="col"><label class="form-label">Max Amount *</label>
+                  <input type="number" class="form-control" formControlName="maxAmount" [class.is-invalid]="pf['maxAmount'].invalid && pf['maxAmount'].touched">
+                  <div class="invalid-feedback">Required</div></div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col"><label class="form-label">Min Tenor (mo) *</label>
+                  <input type="number" class="form-control" formControlName="minTenorMonths" [class.is-invalid]="pf['minTenorMonths'].invalid && pf['minTenorMonths'].touched">
+                  <div class="invalid-feedback">Required</div></div>
+                <div class="col"><label class="form-label">Max Tenor (mo) *</label>
+                  <input type="number" class="form-control" formControlName="maxTenorMonths" [class.is-invalid]="pf['maxTenorMonths'].invalid && pf['maxTenorMonths'].touched">
+                  <div class="invalid-feedback">Required</div></div>
+              </div>
+              <div class="mb-3"><label class="form-label">Interest Rate (%) *</label>
+                <input type="number" step="0.01" class="form-control" formControlName="baseInterestRate" [class.is-invalid]="pf['baseInterestRate'].invalid && pf['baseInterestRate'].touched">
+                <div class="invalid-feedback">Required</div></div>
+
+              <hr style="border-color:var(--border);margin:1rem 0;">
+              <p style="font-size:.78rem;font-weight:700;color:var(--primary);margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.4px;"><i class="bi bi-sliders2 me-1"></i>Credit & Risk Parameters</p>
+
+              <div class="row g-2 mb-3">
+                <div class="col-12">
+                  <label class="form-label">Min CIBIL Score (300–900)</label>
+                  <input type="number" class="form-control" formControlName="creditThreshold" placeholder="e.g. 650">
+                  <div class="form-text">Applicants below this score will be flagged during UW review</div>
+                </div>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label">Min Annual Income (₹)</label>
+                  <input type="number" class="form-control font-mono" formControlName="minIncomeAmount" placeholder="e.g. 300000">
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Max Annual Income (₹)</label>
+                  <input type="number" class="form-control font-mono" formControlName="maxIncomeAmount" placeholder="e.g. 10000000">
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary w-100" [disabled]="creatingProduct() || savingProduct()">
+                @if (creatingProduct() || savingProduct()) { <span class="spinner-border spinner-border-sm"></span> Saving… }
+                @else { <i class="bi bi-floppy"></i> {{ editingProduct() ? 'Save Changes' : 'Create Product' }} }
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ══ TAB 2: MONITOR (Read-Only) ══ -->
+  @if (tab() === 2) {
+    <div style="background:var(--bg-subtle,#fff8e1);border:1px solid #ffc107;border-radius:.5rem;padding:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;display:flex;align-items:center;gap:.5rem;">
+      <i class="bi bi-eye" style="color:#fd7e14;"></i>
+      <strong>Monitor Mode:</strong> Admin can view all role data below. Role-specific actions (Approve, Submit, Disburse, Verify) are restricted to their designated roles.
+    </div>
+
+    @if (loadingMonitor()) {
+      <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div>
+    } @else {
+      <div class="row g-3">
+        <!-- KYC Overview -->
+        <div class="col-lg-6">
+          <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-person-vcard"></i> KYC Records — System Wide</span></div>
+            @if (monitorKyc().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:1.5rem;"><p>No KYC records</p></div> }
+            @else {
+              <div class="table-responsive" style="max-height:280px;overflow-y:auto;">
+                <table class="table table-sm">
+                  <thead><tr><th>KYC ID</th><th>SME</th><th>Status</th><th>Verified By</th></tr></thead>
+                  <tbody>
+                    @for (k of pgMonKyc.paged(); track k.kycId) {
+                      <tr>
+                        <td class="font-mono" style="font-size:.78rem;color:var(--primary);">#{{ k.kycId }}</td>
+                        <td style="font-size:.78rem;">{{ k.smeLegalName || '#'+k.smeId }}</td>
+                        <td><span [class]="badgeClass(k.verificationStatus)" style="font-size:.68rem;">{{ k.verificationStatus }}</span></td>
+                        <td style="font-size:.72rem;color:var(--text-muted);">{{ k.verifiedByEmail || '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+                    <app-paginator [pg]="pgMonKyc"></app-paginator>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Applications Overview -->
+        <div class="col-lg-6">
+          <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-file-earmark-text"></i> Loan Applications — System Wide</span></div>
+            @if (monitorApps().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:1.5rem;"><p>No applications</p></div> }
+            @else {
+              <div class="table-responsive" style="max-height:280px;overflow-y:auto;">
+                <table class="table table-sm">
+                  <thead><tr><th>App ID</th><th>SME</th><th>Amount</th><th>Status</th></tr></thead>
+                  <tbody>
+                    @for (a of pgMonApps.paged(); track a.applicationId) {
+                      <tr>
+                        <td class="font-mono" style="font-size:.78rem;color:var(--primary);">#{{ a.applicationId }}</td>
+                        <td style="font-size:.78rem;">{{ a.smeLegalName || '#'+a.smeId }}</td>
+                        <td class="font-mono" style="font-size:.78rem;">₹{{ a.requestedAmount | number }}</td>
+                        <td><span [class]="badgeClass(a.status.toLowerCase())" style="font-size:.65rem;">{{ a.status }}</span></td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+                    <app-paginator [pg]="pgMonApps"></app-paginator>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Portfolio Metrics -->
+        @if (monitorMetrics()) {
+          @let m = monitorMetrics()!;
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-graph-up-arrow"></i> Portfolio Metrics</span></div>
+              <div class="card-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;">
+                <div style="text-align:center;"><div style="font-size:1.8rem;font-weight:700;color:var(--primary);">{{ m.totalLoanAccounts }}</div><div style="font-size:.78rem;color:var(--text-muted);">Total Accounts</div></div>
+                <div style="text-align:center;"><div style="font-size:1.8rem;font-weight:700;color:#198754;">{{ m.activeLoanAccounts }}</div><div style="font-size:.78rem;color:var(--text-muted);">Active</div></div>
+                <div style="text-align:center;"><div style="font-size:1.8rem;font-weight:700;color:#dc3545;">{{ m.delinquentLoanAccounts }}</div><div style="font-size:.78rem;color:var(--text-muted);">Delinquent</div></div>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- Recent Audit Logs -->
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-list-ul"></i> Recent Audit Events (last 50)</span></div>
+            @if (monitorAuditLogs().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:1.5rem;"><p>No audit events</p></div> }
+            @else {
+              <div class="table-responsive" style="max-height:300px;overflow-y:auto;">
+                <table class="table table-sm">
+                  <thead><tr><th>#</th><th>Action</th><th>Ref</th><th>Actor</th><th>Message</th></tr></thead>
+                  <tbody>
+                    @for (log of pgAuditLogs.paged(); track log.auditId) {
+                      <tr>
+                        <td class="font-mono" style="font-size:.72rem;color:var(--text-muted);">{{ log.auditId }}</td>
+                        <td style="font-size:.72rem;font-weight:600;">{{ log.action }}</td>
+                        <td class="font-mono" style="font-size:.72rem;">{{ log.refType }} #{{ log.refId }}</td>
+                        <td style="font-size:.72rem;">{{ log.actorEmail || '#'+log.actorUserId }}</td>
+                        <td style="font-size:.72rem;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ log.message || '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+                    <app-paginator [pg]="pgAuditLogs"></app-paginator>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- ══ TAB 3: ELIGIBILITY POLICIES ══ -->
+  @if (tab() === 3) {
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <span class="fw-bold d-flex align-items-center gap-2" style="font-family:var(--fs-font-head);color:#0f766e;">
+              <i class="bi bi-shield-check"></i> Eligibility Policies
+            </span>
+            <button class="btn btn-sm btn-outline-primary" (click)="showPolicyForm.set(!showPolicyForm())">
+              <i class="bi bi-plus-lg"></i> Add Policy
+            </button>
+          </div>
+          @if (showPolicyForm()) {
+            <div class="card-body border-bottom" style="background:#f0fdfa;">
+              <div class="row g-2">
+                <div class="col-md-3">
+                  <label class="form-label">Product ID *</label>
+                  <input type="number" class="form-control form-control-sm" [(ngModel)]="policyProductId" placeholder="Product ID">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Rule Name *</label>
+                  <input class="form-control form-control-sm" [(ngModel)]="policyRuleName" placeholder="e.g. Credit Score Gate">
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label">Rule Expression</label>
+                  <input class="form-control form-control-sm" [(ngModel)]="policyRuleExpr" placeholder="e.g. cibil >= 650 AND vintage >= 12">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Max Amount Cap</label>
+                  <input type="number" class="form-control form-control-sm" [(ngModel)]="policyMaxAmount" placeholder="e.g. 500000">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Min Credit Score</label>
+                  <input type="number" class="form-control form-control-sm" [(ngModel)]="policyMinScore" placeholder="e.g. 650">
+                </div>
+                <div class="col-md-6 d-flex align-items-end">
+                  <button class="btn btn-primary btn-sm me-2" (click)="createPolicy()" [disabled]="savingPolicy()">
+                    @if (savingPolicy()) { <span class="spinner-border spinner-border-sm"></span> }
+                    Save Policy
+                  </button>
+                  <button class="btn btn-outline-secondary btn-sm" (click)="showPolicyForm.set(false)">Cancel</button>
+                </div>
+              </div>
+            </div>
+          }
+          @if (loadingPolicies()) {
+            <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div>
+          } @else if (policies().length === 0) {
+            <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2">
+              <i class="bi bi-shield-x" style="font-size:2rem;opacity:.3;"></i>
+              <p>No eligibility policies yet. Add one to enforce application rules.</p>
+            </div>
+          } @else {
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>#</th><th>Product</th><th>Rule Name</th><th>Expression</th><th>Max Cap</th><th>Min CIBIL</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  @for (p of pgPolicies.paged(); track p.policyId) {
+                    <tr>
+                      <td class="font-mono" style="color:var(--bs-primary);">#{{ p.policyId }}</td>
+                      <td><small>{{ p.productName }}</small></td>
+                      <td class="fw-semibold">{{ p.ruleName }}</td>
+                      <td><small class="text-muted font-mono">{{ p.ruleExpression || '—' }}</small></td>
+                      <td class="font-mono">{{ p.maxAmountCap ? '₹'+(p.maxAmountCap|number) : '—' }}</td>
+                      <td>{{ p.minCreditScore ?? '—' }}</td>
+                      <td><span class="badge-status" [class.bs-active]="p.status==='ACTIVE'" [class.bs-inactive]="p.status!=='ACTIVE'">{{ p.status }}</span></td>
+                      <td>
+                        <button class="btn btn-outline-danger btn-sm" (click)="deactivatePolicy(p.policyId)" title="Deactivate">
+                          <i class="bi bi-dash-circle"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <app-paginator [pg]="pgPolicies"></app-paginator>
+          }
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card p-3 border-0 shadow-sm">
+          <div class="fw-bold text-uppercase text-primary mb-2" style="font-size:.7rem;letter-spacing:.5px;font-family:var(--fs-font-head);">About Policies</div>
+          <p class="text-muted small">Eligibility policies are validated when an application is submitted. Failing rules trigger AUTO_DECLINE in the decision engine.</p>
+          <div class="d-flex flex-column gap-2 mt-2" style="font-size:.78rem;">
+            <div class="d-flex gap-2"><i class="bi bi-check-circle-fill text-success mt-1"></i><span><strong>Max Amount Cap:</strong> Override product maximum for this rule</span></div>
+            <div class="d-flex gap-2"><i class="bi bi-check-circle-fill text-success mt-1"></i><span><strong>Min Credit Score:</strong> CIBIL/score threshold to proceed</span></div>
+            <div class="d-flex gap-2"><i class="bi bi-check-circle-fill text-success mt-1"></i><span><strong>Rule Expression:</strong> Human-readable logic for documentation</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ══ TAB 4: FEE CONFIGS ══ -->
+  @if (tab() === 4) {
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <span class="fw-bold d-flex align-items-center gap-2" style="font-family:var(--fs-font-head);color:#0f766e;">
+              <i class="bi bi-cash-coin"></i> Fee Configurations
+            </span>
+            <button class="btn btn-sm btn-outline-primary" (click)="showFeeForm.set(!showFeeForm())">
+              <i class="bi bi-plus-lg"></i> Add Fee
+            </button>
+          </div>
+          @if (showFeeForm()) {
+            <div class="card-body border-bottom" style="background:#f0fdfa;">
+              <div class="row g-2">
+                <div class="col-md-3">
+                  <label class="form-label">Product ID *</label>
+                  <input type="number" class="form-control form-control-sm" [(ngModel)]="feeProductId" placeholder="Product ID">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Fee Type *</label>
+                  <select class="form-select form-select-sm" [(ngModel)]="feeType">
+                    @for (t of ['PROCESSING','INSURANCE','TECH','LEGAL','OTHER']; track t) {
+                      <option [value]="t">{{ t }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Mode *</label>
+                  <select class="form-select form-select-sm" [(ngModel)]="feeMode">
+                    <option value="FLAT">FLAT (₹)</option>
+                    <option value="PERCENT">PERCENT (%)</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Value *</label>
+                  <input type="number" step="0.01" class="form-control form-control-sm" [(ngModel)]="feeValue"
+                         [placeholder]="feeMode==='FLAT' ? 'e.g. 5000' : 'e.g. 2.5'">
+                </div>
+                <div class="col-md-2 d-flex align-items-end gap-1">
+                  <button class="btn btn-primary btn-sm" (click)="createFee()" [disabled]="savingFee()">
+                    @if (savingFee()) { <span class="spinner-border spinner-border-sm"></span> }
+                    Save
+                  </button>
+                  <button class="btn btn-outline-secondary btn-sm" (click)="showFeeForm.set(false)">✕</button>
+                </div>
+              </div>
+            </div>
+          }
+          @if (loadingFees()) {
+            <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div>
+          } @else if (fees().length === 0) {
+            <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2">
+              <i class="bi bi-cash-coin" style="font-size:2rem;opacity:.3;"></i>
+              <p>No fee configurations yet.</p>
+            </div>
+          } @else {
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>#</th><th>Product</th><th>Type</th><th>Mode</th><th>Value</th><th>Effective</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  @for (f of pgFees.paged(); track f.feeId) {
+                    <tr>
+                      <td class="font-mono" style="color:var(--bs-primary);">#{{ f.feeId }}</td>
+                      <td><small>{{ f.productName }}</small></td>
+                      <td><span class="badge-status bs-draft">{{ f.feeType }}</span></td>
+                      <td>{{ f.feeMode }}</td>
+                      <td class="font-mono fw-bold">{{ f.feeMode === 'FLAT' ? '₹'+(f.value|number) : f.value+'%' }}</td>
+                      <td style="font-size:.75rem;color:var(--bs-secondary);">
+                        {{ f.effectiveFrom || '—' }} → {{ f.effectiveTo || 'Ongoing' }}
+                      </td>
+                      <td><span class="badge-status" [class.bs-active]="f.status==='ACTIVE'" [class.bs-inactive]="f.status!=='ACTIVE'">{{ f.status }}</span></td>
+                      <td>
+                        <button class="btn btn-outline-danger btn-sm" (click)="deactivateFee(f.feeId)" title="Deactivate">
+                          <i class="bi bi-dash-circle"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <app-paginator [pg]="pgFees"></app-paginator>
+          }
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card p-3 border-0 shadow-sm">
+          <div class="fw-bold text-uppercase text-primary mb-2" style="font-size:.7rem;letter-spacing:.5px;font-family:var(--fs-font-head);">Fee Calculation</div>
+          <p class="text-muted small">Fees are applied automatically at disbursement. The net disbursed amount = Sanctioned Amount − Total Fees.</p>
+          <div class="d-flex flex-column gap-2 mt-2" style="font-size:.78rem;">
+            <div class="d-flex gap-2"><i class="bi bi-arrow-right-circle-fill text-primary mt-1"></i><span><strong>FLAT:</strong> Fixed INR amount deducted (e.g. ₹5,000)</span></div>
+            <div class="d-flex gap-2"><i class="bi bi-arrow-right-circle-fill text-primary mt-1"></i><span><strong>PERCENT:</strong> % of sanctioned amount (e.g. 2.5%)</span></div>
+            <div class="d-flex gap-2"><i class="bi bi-info-circle-fill text-info mt-1"></i><span>Multiple fee types can stack (Processing + Insurance)</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>

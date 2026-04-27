@@ -1,0 +1,172 @@
+<div class="landing-wrap">
+  <!-- ═══ Left Hero Panel ═══ -->
+  <div class="landing-hero">
+    <div class="hero-content">
+      <div class="hero-brand">
+        <div class="hero-logo"><img src="assets/finserve-logo.png" alt="FinServe" style="width:36px;height:36px;object-fit:contain;border-radius:8px;"></div>
+        <div>
+          <div class="hero-name">FinServe</div>
+          <div class="hero-tagline">Enterprise Lending Platform</div>
+        </div>
+      </div>
+      <h1 class="hero-headline">Streamline your<br>entire lending<br>lifecycle</h1>
+      <p class="hero-desc">End-to-end loan management — from SME onboarding and KYC verification to underwriting, disbursement and collections.</p>
+      <div class="hero-features">
+        @for (f of ['SME Onboarding & KYC/KYB','AI-Assisted Underwriting','Disbursement & Repayment','Collections & PTP Management','Risk Analytics & Compliance']; track f) {
+          <div class="hero-feat"><i class="bi bi-check-circle-fill"></i><span>{{ f }}</span></div>
+        }
+      </div>
+      <div class="hero-stats">
+        <div class="h-stat"><div class="h-stat-val">99.9%</div><div class="h-stat-lbl">Uptime SLA</div></div>
+        <div class="h-divider"></div>
+        <div class="h-stat"><div class="h-stat-val">256-bit</div><div class="h-stat-lbl">SSL Encryption</div></div>
+        <div class="h-divider"></div>
+        <div class="h-stat"><div class="h-stat-val">SOC 2</div><div class="h-stat-lbl">Compliant</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Right Auth Panel ═══ -->
+  <div class="landing-auth">
+    <div class="auth-box slide-up">
+      <!-- Tab Toggle -->
+      <div class="auth-tabs">
+        <button class="auth-tab" [class.active]="mode()==='login'" (click)="switchMode('login')">Sign In</button>
+        <button class="auth-tab" [class.active]="mode()==='register'" (click)="switchMode('register')">Register</button>
+      </div>
+
+      @if (error()) {
+        <div class="auth-error"><i class="bi bi-exclamation-triangle-fill"></i> {{ error() }}</div>
+      }
+
+      <!-- ═══ LOGIN ═══ -->
+      @if (mode() === 'login') {
+        <div class="auth-form-wrap fade-in">
+          <h2 class="auth-heading">Welcome back</h2>
+          <p class="auth-sub">Sign in to your workspace</p>
+
+          <form [formGroup]="loginForm" (ngSubmit)="login()">
+            <div class="field-group">
+              <label class="field-label">Email Address</label>
+              <input type="email" class="field-input" formControlName="email" placeholder="you@company.com"
+                     [class.invalid]="lf['email'].invalid && lf['email'].touched">
+              @if (lf['email'].invalid && lf['email'].touched) {
+                <span class="field-err">Valid email required</span>
+              }
+            </div>
+            <div class="field-group">
+              <label class="field-label">Password</label>
+              <div class="input-icon-wrap">
+                <input [type]="showPwd() ? 'text' : 'password'" class="field-input" formControlName="password"
+                       placeholder="Enter password" [class.invalid]="lf['password'].invalid && lf['password'].touched">
+                <button type="button" class="input-toggle" (click)="togglePwd()">
+                  <i class="bi" [class.bi-eye]="!showPwd()" [class.bi-eye-slash]="showPwd()"></i>
+                </button>
+              </div>
+              @if (lf['password'].invalid && lf['password'].touched) {
+                <span class="field-err">Password required</span>
+              }
+            </div>
+            <button type="submit" class="btn-auth-primary" [disabled]="loading()">
+              @if (loading()) { <span class="btn-spinner"></span> Authenticating… }
+              @else { <i class="bi bi-box-arrow-in-right me-1"></i> Sign In to Dashboard }
+            </button>
+          </form>
+
+          <div class="auth-divider"><span>or</span></div>
+          <p class="auth-switch">
+            New customer? <button class="link-btn" (click)="switchMode('register')">Create an account</button>
+          </p>
+          <div class="auth-notice">
+            <i class="bi bi-shield-lock-fill"></i>
+            Staff accounts (Agent, Underwriter, Operations, etc.) are provisioned by your system administrator.
+          </div>
+        </div>
+      }
+
+      <!-- ═══ REGISTER ═══ -->
+      @if (mode() === 'register') {
+        <div class="auth-form-wrap fade-in">
+          <h2 class="auth-heading">Create account</h2>
+
+          <div class="role-notice">
+            <i class="bi bi-person-fill-check"></i>
+            <div>
+              <strong>Customer (Applicant) Registration Only</strong>
+              <p>This form creates a customer account to apply for SME loans. Agents, Underwriters, and other staff roles are created by the Admin.</p>
+            </div>
+          </div>
+
+          <form [formGroup]="regForm" (ngSubmit)="register()">
+            <div class="field-row">
+              <div class="field-group">
+                <label class="field-label">Full Name *</label>
+                <input class="field-input" formControlName="fullName" placeholder="Rajesh Kumar"
+                       [class.invalid]="rf['fullName'].invalid && rf['fullName'].touched">
+                @if (rf['fullName'].invalid && rf['fullName'].touched) { <span class="field-err">Required</span> }
+              </div>
+              <div class="field-group">
+                <label class="field-label">Phone *</label>
+                <input class="field-input" formControlName="phone" placeholder="9876543210"
+                       [class.invalid]="rf['phone'].invalid && rf['phone'].touched">
+                @if (rf['phone'].invalid && rf['phone'].touched) { <span class="field-err">10-digit phone required</span> }
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Email Address *</label>
+              <input type="email" class="field-input" formControlName="email" placeholder="you@company.com"
+                     [class.invalid]="rf['email'].invalid && rf['email'].touched">
+              @if (rf['email'].invalid && rf['email'].touched) { <span class="field-err">Valid email required</span> }
+            </div>
+            <div class="field-group">
+              <label class="field-label">Password * <span class="field-hint">(min 8 characters)</span></label>
+              <div class="input-icon-wrap">
+                <input [type]="showPwd() ? 'text' : 'password'" class="field-input" formControlName="password"
+                       placeholder="Create strong password" [class.invalid]="rf['password'].invalid && rf['password'].touched">
+                <button type="button" class="input-toggle" (click)="togglePwd()">
+                  <i class="bi" [class.bi-eye]="!showPwd()" [class.bi-eye-slash]="showPwd()"></i>
+                </button>
+              </div>
+              @if (rf['password'].invalid && rf['password'].touched) { <span class="field-err">Min 8 characters</span> }
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label class="field-label">Bank Account No. *</label>
+                <input class="field-input font-mono" formControlName="bankAccountNo"
+                       placeholder="e.g. 012345678901"
+                       [class.field-error]="rf['bankAccountNo'].invalid && rf['bankAccountNo'].touched">
+                @if (rf['bankAccountNo'].invalid && rf['bankAccountNo'].touched) {
+                  <div class="field-hint error">
+                    @if (rf['bankAccountNo'].errors?.['required']) { Account number is required. }
+                    @if (rf['bankAccountNo'].errors?.['pattern']) { Must be 9–18 digits. }
+                  </div>
+                }
+              </div>
+              <div class="field-group">
+                <label class="field-label">IFSC Code *</label>
+                <input class="field-input font-mono" formControlName="ifsc"
+                       placeholder="SBIN0001234" style="text-transform:uppercase;"
+                       [class.field-error]="rf['ifsc'].invalid && rf['ifsc'].touched">
+                @if (rf['ifsc'].invalid && rf['ifsc'].touched) {
+                  <div class="field-hint error">
+                    @if (rf['ifsc'].errors?.['required']) { IFSC code is required. }
+                    @if (rf['ifsc'].errors?.['pattern']) { Format: 4 letters + 0 + 6 chars (e.g. SBIN0001234) }
+                  </div>
+                }
+              </div>
+            </div>
+            <button type="submit" class="btn-auth-primary" [disabled]="loading()">
+              @if (loading()) { <span class="btn-spinner"></span> Creating Account… }
+              @else { <i class="bi bi-person-plus-fill me-1"></i> Create Customer Account }
+            </button>
+          </form>
+
+          <div class="auth-divider"><span>or</span></div>
+          <p class="auth-switch">
+            Already registered? <button class="link-btn" (click)="switchMode('login')">Sign in</button>
+          </p>
+        </div>
+      }
+    </div>
+  </div>
+</div>

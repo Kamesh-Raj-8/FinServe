@@ -1,0 +1,153 @@
+<div class="fade-in">
+
+  <!-- Page Header -->
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+    <div>
+      <h4 class="rp-title h5 fw-bold mb-0"><i class="bi bi-graph-up-arrow"></i> Risk Dashboard</h4>
+      <p class="text-muted small mt-1">Portfolio health, delinquency analysis and bucket distribution</p>
+    </div>
+    <div style="display:flex;gap:.5rem;align-items:center;">
+      @if (isReadOnly()) {
+        <span class="readonly-badge"><i class="bi bi-eye-fill"></i> View Only</span>
+      }
+      <button class="btn-refresh" (click)="loadMetrics()" [disabled]="loading()">
+        <i class="bi bi-arrow-clockwise" [class.spin]="loading()"></i> Refresh
+      </button>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <!-- Skeleton Loader -->
+    <div class="risk-skeleton">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1.5rem;">
+        @for (i of [1,2,3,4]; track i) { <div class="skeleton-kpi"></div> }
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;">
+        <div class="skeleton-chart"></div>
+        <div class="skeleton-chart"></div>
+      </div>
+    </div>
+  } @else {
+    @if (metrics(); as m) {
+
+    <!-- KPI Cards -->
+    <div class="risk-kpis">
+      <div class="risk-kpi-card">
+        <div class="kpi-icon" style="background:var(--primary-lt);color:var(--primary);"><i class="bi bi-bank2"></i></div>
+        <div class="kpi-val">{{ m.totalLoanAccounts }}</div>
+        <div class="kpi-lbl">Total Accounts</div>
+      </div>
+      <div class="risk-kpi-card">
+        <div class="kpi-icon" style="background:#ecfdf5;color:#10b981;"><i class="bi bi-check-circle"></i></div>
+        <div class="kpi-val" style="color:#10b981;">{{ m.activeLoanAccounts }}</div>
+        <div class="kpi-lbl">Active</div>
+      </div>
+      <div class="risk-kpi-card">
+        <div class="kpi-icon" style="background:#fef2f2;color:#ef4444;"><i class="bi bi-exclamation-triangle"></i></div>
+        <div class="kpi-val" style="color:#ef4444;">{{ m.delinquentLoanAccounts }}</div>
+        <div class="kpi-lbl">Delinquent</div>
+      </div>
+      <div class="risk-kpi-card">
+        <div class="kpi-icon" [style.background]="healthColor()+'22'" [style.color]="healthColor()">
+          <i class="bi bi-heart-pulse"></i>
+        </div>
+        <div class="kpi-val" [style.color]="healthColor()">{{ healthScore() }}</div>
+        <div class="kpi-lbl">Portfolio Health Score</div>
+      </div>
+      <div class="risk-kpi-card risk-kpi-wide">
+        <div class="kpi-rate-wrap">
+          <div class="kpi-rate-val" [style.color]="(+delinquencyRate()) > 10 ? '#ef4444' : '#10b981'">
+            {{ delinquencyRate() }}%
+          </div>
+          <div class="kpi-rate-bar">
+            <div class="kpi-rate-fill"
+                 [style.width]="delinquencyRate()+'%'"
+                 [style.background]="(+delinquencyRate()) > 10 ? '#ef4444' : '#10b981'">
+            </div>
+          </div>
+        </div>
+        <div class="kpi-lbl">Delinquency Rate</div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="risk-charts-row">
+
+      <!-- Doughnut Chart: Portfolio Distribution -->
+      <div class="risk-chart-card">
+        <div class="chart-card-header">
+          <span class="chart-title"><i class="bi bi-pie-chart-fill"></i> Portfolio Distribution</span>
+          <span class="chart-badge">Live</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas #doughnutCanvas></canvas>
+          <div class="doughnut-center">
+            <div class="dc-val">{{ m.totalLoanAccounts }}</div>
+            <div class="dc-lbl">Accounts</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bar Chart: DPD Bucket Distribution -->
+      <div class="risk-chart-card">
+        <div class="chart-card-header">
+          <span class="chart-title"><i class="bi bi-bar-chart-fill"></i> DPD Bucket Distribution</span>
+          <span class="chart-badge">Days Past Due</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          @if (bucketEntries().length > 0) {
+            <canvas #barCanvas></canvas>
+          } @else {
+            <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2">
+              <i class="bi bi-bar-chart" style="font-size:2.5rem;opacity:.25;"></i>
+              <p>No bucket data available</p>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Bucket Detail Table -->
+    @if (bucketEntries().length > 0) {
+      <div class="risk-bucket-table">
+        <div class="rbt-header">
+          <span class="rbt-title"><i class="bi bi-table"></i> Bucket Breakdown</span>
+        </div>
+        <div class="rbt-body">
+          <div class="rbt-row rbt-head-row">
+            <span>DPD Bucket</span>
+            <span>Accounts</span>
+            <span>% of Portfolio</span>
+            <span>Risk Band</span>
+          </div>
+          @for (entry of bucketEntries(); track entry.bucket) {
+            <div class="rbt-row">
+              <span class="font-mono" style="font-weight:600;">{{ entry.bucket }}</span>
+              <span class="font-mono">{{ entry.count }}</span>
+              <div style="display:flex;align-items:center;gap:.625rem;">
+                <div class="rbt-bar-wrap">
+                  <div class="rbt-bar" [style.width]="entry.pct+'%'" [style.background]="bucketColor(entry.bucket)"></div>
+                </div>
+                <span class="font-mono" style="font-size:.78rem;color:var(--text-muted);">{{ entry.pct }}%</span>
+              </div>
+              <span class="risk-band"
+                    [style.background]="bucketColor(entry.bucket)+'1a'"
+                    [style.color]="bucketColor(entry.bucket)">
+                {{ entry.bucket === 'CURRENT' || entry.bucket === 'X' ? 'Low' :
+                   entry.bucket.includes('1-30') ? 'Medium' :
+                   entry.bucket.includes('31-60') ? 'High' : 'Critical' }}
+              </span>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    } @else {
+      <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2">
+        <i class="bi bi-graph-up-arrow" style="font-size:3rem;opacity:.2;"></i>
+        <p>No risk data available. Click Refresh to load portfolio metrics.</p>
+      </div>
+    }
+  }
+</div>

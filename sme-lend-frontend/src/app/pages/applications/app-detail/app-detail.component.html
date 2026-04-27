@@ -1,0 +1,213 @@
+<div class="fade-in">
+  <ol class="breadcrumb"><li><a routerLink="/applications">Applications</a><li>#{{ appId }}</ol>
+
+  @if (loading()) { <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div> }
+
+  @if (!loading() && app()) {
+    @if (alertMsg()) {
+      <div class="alert mb-3" [class]="'alert-'+alertType()">
+        <i class="bi me-2" [class.bi-check-circle-fill]="alertType()==='success'" [class.bi-exclamation-triangle-fill]="alertType()==='danger'"></i>{{ alertMsg() }}
+      </div>
+    }
+
+    <div class="page-header d-flex align-items-start justify-content-between flex-wrap gap-2">
+      <div>
+        <h4><i class="bi bi-file-earmark-text"></i> Application #{{ app()!.applicationId }}</h4>
+        <p>{{ app()!.smeLegalName || 'SME #' + app()!.smeId }}</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:.75rem;">
+        <span [class]="statusClass(app()!.status)" style="font-size:.875rem;padding:.375rem .875rem;">{{ formatStatus(app()!.status) }}</span>
+        @if (canSubmit()) {
+          <button class="btn btn-primary" (click)="submitApp()" [disabled]="submitting()">
+            @if (submitting()) { <span class="spinner-border spinner-border-sm"></span> Submitting… }
+            @else { <i class="bi bi-send-check"></i> Submit for UW }
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- Status pipeline -->
+    <div class="card mb-3" style="padding:1rem 1.25rem;">
+      <div style="display:flex;gap:.25rem;flex-wrap:wrap;">
+        @for (step of ['DRAFT','SUBMITTED','ROUTED_TO_UW','UW_APPROVED','OFFERED','DISBURSED']; track step) {
+          <div style="flex:1;text-align:center;min-width:80px;">
+            <div style="height:4px;border-radius:4px;margin-bottom:.375rem;"
+                 [style.background]="app()!.status === step || isAfter(app()!.status, step) ? 'var(--primary)' : 'var(--border)'"></div>
+            <span style="font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;"
+                  [style.color]="app()!.status === step ? 'var(--primary)' : 'var(--text-muted)'">{{ formatStatus(step) }}</span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <!-- Details + Documents -->
+      <div class="col-lg-7">
+        <!-- Application Details -->
+        <div class="card mb-3">
+          <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-info-circle"></i> Application Details</span></div>
+          <div class="card-body">
+            <div class="info-row"><span class="info-label">SME</span><span class="info-value">{{ app()!.smeLegalName || 'SME #' + app()!.smeId }}</span></div>
+            <div class="info-row"><span class="info-label">Product</span><span class="info-value">{{ app()!.productName || 'Product #' + app()!.productId }}</span></div>
+            <div class="info-row"><span class="info-label">Requested Amount</span><span class="info-value font-mono">₹{{ app()!.requestedAmount | number:'1.0-0' }}</span></div>
+            <div class="info-row"><span class="info-label">Tenor</span><span class="info-value">{{ app()!.tenorMonths }} months</span></div>
+            <div class="info-row"><span class="info-label">Purpose</span><span class="info-value">{{ app()!.purposeNote || '—' }}</span></div>
+            <div class="info-row"><span class="info-label">Created By</span><span class="info-value">{{ app()!.createdByEmail || '—' }}</span></div>
+            <div class="info-row"><span class="info-label">Created Date</span><span class="info-value">{{ app()!.createdDate ? (app()!.createdDate | date:'medium') : '—' }}</span></div>
+          </div>
+        </div>
+
+        <!-- Documents Panel -->
+        <div class="card">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="card-title"><i class="bi bi-paperclip"></i> Documents ({{ docs().length }})</span>
+            @if (isOwnerOrAgent() && !isAdmin()) {
+              <div style="display:flex;gap:.35rem;">
+                <button class="btn btn-outline-primary btn-sm" [class.active]="uploadMode()==='file'" (click)="uploadMode.set('file')">
+                  <i class="bi bi-file-earmark-pdf"></i> PDF Upload
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" [class.active]="uploadMode()==='uri'" (click)="uploadMode.set('uri')">
+                  <i class="bi bi-link"></i> URL Link
+                </button>
+              </div>
+            }
+            @if (isAdmin()) {
+              <span style="font-size:.75rem;color:var(--text-muted);"><i class="bi bi-eye me-1"></i>View Only</span>
+            }
+          </div>
+
+          <!-- Upload modes — hidden for admin -->
+          @if (isOwnerOrAgent() && !isAdmin()) {
+            <div style="padding:1rem;background:var(--bg-subtle,#f8fafc);border-bottom:1px solid var(--border);">
+
+              <!-- PDF Upload Mode -->
+              @if (uploadMode() === 'file') {
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
+                  <div style="flex:1;min-width:120px;">
+                    <label class="form-label">Document Type</label>
+                    <select class="form-select" [(ngModel)]="selectedDocType">
+                      @for (dt of docTypes; track dt) { <option [value]="dt">{{ dt }}</option> }
+                    </select>
+                  </div>
+                  <div style="flex:2;min-width:200px;">
+                    <label class="form-label">Choose PDF / Image *</label>
+                    <input id="fileInput" type="file" class="form-control" accept="application/pdf,image/*"
+                           (change)="onFileSelected($event)"
+                           [class.is-invalid]="fileError">
+                    @if (fileError) { <div class="invalid-feedback" style="display:block;">{{ fileError }}</div> }
+                    @if (selectedFile) {
+                      <div style="font-size:.75rem;color:var(--text-muted);margin-top:.25rem;">
+                        <i class="bi bi-file-earmark-check text-success me-1"></i>
+                        {{ selectedFile.name }} ({{ (selectedFile.size / 1024).toFixed(1) }} KB)
+                      </div>
+                    }
+                  </div>
+                  <button class="btn btn-primary" (click)="uploadDoc()" [disabled]="addingDoc() || !selectedFile">
+                    @if (addingDoc()) { <span class="spinner-border spinner-border-sm"></span> Uploading… }
+                    @else { <i class="bi bi-cloud-upload"></i> Upload }
+                  </button>
+                </div>
+              }
+
+              <!-- URI Mode (legacy) -->
+              @if (uploadMode() === 'uri') {
+                <form [formGroup]="docForm" (ngSubmit)="addDoc()" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
+                  <div style="flex:1;min-width:120px;">
+                    <label class="form-label">Type</label>
+                    <select class="form-select" formControlName="docType">
+                      @for (dt of docTypes; track dt) { <option [value]="dt">{{ dt }}</option> }
+                    </select>
+                  </div>
+                  <div style="flex:2;min-width:200px;">
+                    <label class="form-label">File URI / URL *</label>
+                    <input class="form-control" formControlName="fileUri" placeholder="https://storage.example.com/doc.pdf"
+                           [class.is-invalid]="df['fileUri'].invalid && df['fileUri'].touched">
+                    <div class="invalid-feedback">Required</div>
+                  </div>
+                  <button type="submit" class="btn btn-primary" [disabled]="addingDoc()">
+                    @if (addingDoc()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-link-45deg"></i> } Add Link
+                  </button>
+                </form>
+              }
+            </div>
+          }
+
+          <!-- Document List -->
+          @if (docs().length === 0) {
+            <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:1.5rem;"><i class="bi bi-paperclip"></i><p>No documents attached</p></div>
+          } @else {
+            <div class="table-responsive">
+              <table class="table">
+                <thead><tr><th>#</th><th>Type</th><th>File</th><th>Uploaded</th><th>Download</th></tr></thead>
+                <tbody>
+                  @for (d of docs(); track d.documentId) {
+                    <tr>
+                      <td class="font-mono" style="color:var(--primary);">#{{ d.documentId }}</td>
+                      <td><span class="badge-status bs-draft">{{ d.docType }}</span></td>
+                      <td style="font-size:.78rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        @if (d.fileName) {
+                          <i class="bi bi-file-earmark-pdf text-danger me-1"></i>{{ d.fileName }}
+                        } @else if (d.fileUri) {
+                          <a [href]="d.fileUri" target="_blank" style="color:var(--primary);">{{ d.fileUri }}</a>
+                        } @else { — }
+                      </td>
+                      <td style="font-size:.75rem;color:var(--text-muted);">{{ d.uploadedDate ? (d.uploadedDate | date:'dd MMM') : 'Just now' }}</td>
+                      <td>
+                        @if (d.downloadUrl) {
+                          <button class="btn btn-outline-primary btn-sm" (click)="downloadDoc(d)" title="Download">
+                            <i class="bi bi-download"></i>
+                          </button>
+                        } @else { <span style="color:var(--text-muted);">—</span> }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Actions Sidebar -->
+      <div class="col-lg-5">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-lightning-charge"></i> Quick Actions</span></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:.5rem;">
+            <a [routerLink]="['/kyc']" [queryParams]="{smeId: app()!.smeId}" class="btn btn-outline-primary">
+              <i class="bi bi-person-vcard me-2"></i>View KYC for this SME
+            </a>
+            <a [routerLink]="['/sme', app()!.smeId]" class="btn btn-outline-secondary">
+              <i class="bi bi-building me-2"></i>View SME Details
+            </a>
+            @if (canSubmit()) {
+              <button class="btn btn-success" (click)="submitApp()" [disabled]="submitting()">
+                @if (submitting()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-send-check"></i> }
+                Submit for Underwriting
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- Status Info Card -->
+        <div class="card mt-3">
+          <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-info-square"></i> Status Guide</span></div>
+          <div class="card-body" style="font-size:.8rem;">
+            <div style="display:flex;flex-direction:column;gap:.35rem;">
+              @for (step of ['DRAFT','KYC_PENDING','READY_TO_SUBMIT','SUBMITTED','ROUTED_TO_UW','UW_APPROVED','OFFERED','OFFER_ACCEPTED','DISBURSED']; track step) {
+                <div style="display:flex;align-items:center;gap:.5rem;"
+                     [style.font-weight]="app()!.status===step ? '700' : '400'"
+                     [style.color]="app()!.status===step ? 'var(--primary)' : 'var(--text-muted)'">
+                  <i class="bi" style="font-size:.65rem;"
+                     [class.bi-check-circle-fill]="isAfter(app()!.status, step)"
+                     [class.bi-record-circle-fill]="app()!.status===step"
+                     [class.bi-circle]="!isAfter(app()!.status, step) && app()!.status!==step"></i>
+                  {{ formatStatus(step) }}
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>

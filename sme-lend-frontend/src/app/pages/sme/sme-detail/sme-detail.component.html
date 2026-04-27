@@ -1,0 +1,146 @@
+<div class="fade-in">
+  <ol class="breadcrumb"><li><a routerLink="/sme">SME Onboarding</a><li>{{ sme()?.legalName || 'Loading…' }}</ol>
+  @if (loading()) { <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div> }
+  @if (!loading() && sme()) {
+    @if (alertMsg()) { <div class="alert mb-3" [class]="'alert-' + alertType()"><i class="bi me-2" [class.bi-check-circle-fill]="alertType()==='success'" [class.bi-exclamation-triangle-fill]="alertType()==='danger'"></i>{{ alertMsg() }}</div> }
+    <div class="page-header d-flex align-items-start justify-content-between flex-wrap gap-2">
+      <div><h4><i class="bi bi-building"></i> {{ sme()!.legalName }}</h4><p><span class="badge-status bs-draft">{{ sme()!.businessType }}</span> &nbsp; {{ sme()!.industry }}</p></div>
+      <div style="display:flex;gap:.5rem;align-items:center;">
+        @if (isAdmin()) {
+          <span style="font-size:.72rem;color:var(--text-muted);background:var(--bg-subtle,#fff8e1);border:1px solid #ffc107;border-radius:.375rem;padding:.2rem .5rem;">
+            <i class="bi bi-lock-fill me-1" style="color:#fd7e14;"></i>Admin View-Only
+          </span>
+        }
+        <button class="btn btn-outline-secondary btn-sm" (click)="openEdit()"
+                [disabled]="isAdmin()"
+                [title]="isAdmin() ? 'Admin cannot edit SME records' : 'Edit SME'">
+          <i class="bi bi-pencil"></i> Edit
+        </button>
+        <a class="btn btn-primary btn-sm"
+           [class.disabled]="isAdmin()"
+           [routerLink]="isAdmin() ? null : ['/applications/new']"
+           [queryParams]="isAdmin() ? null : {smeId: sme()!.smeId}"
+           [title]="isAdmin() ? 'Admin cannot create applications' : 'New Application'">
+          <i class="bi bi-file-earmark-plus"></i> New Application
+        </a>
+      </div>
+    </div>
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="card mb-3">
+          <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-info-circle"></i> Business Details</span></div>
+          <div class="card-body">
+            <div class="info-row"><span class="info-label">Legal Name</span><span class="info-value">{{ sme()!.legalName }}</span></div>
+            <div class="info-row"><span class="info-label">Trade Name</span><span class="info-value">{{ sme()!.tradeName || '—' }}</span></div>
+            <div class="info-row"><span class="info-label">Business Type</span><span class="info-value">{{ sme()!.businessType }}</span></div>
+            <div class="info-row"><span class="info-label">Industry</span><span class="info-value">{{ sme()!.industry }}</span></div>
+            <div class="info-row"><span class="info-label">Address</span><span class="info-value">{{ sme()!.address }}</span></div>
+            <div class="info-row"><span class="info-label">GST No.</span><span class="info-value font-mono">{{ sme()!.gstNo || '—' }}</span></div>
+            <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span [class]="badgeClass(sme()!.status)">{{ sme()!.status }}</span></span></div>
+          </div>
+        </div>
+
+        <!-- Promoters -->
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-people"></i> Promoters ({{ promoters().length }})</span>
+            <button class="btn btn-sm btn-outline-primary" (click)="togglePromoterForm()"
+                    [disabled]="isAdmin()"
+                    [title]="isAdmin() ? 'Admin cannot add promoters' : 'Add Promoter'">
+              <i class="bi bi-plus"></i> Add
+            </button>
+          </div>
+          @if (showPromoterForm() && !isAdmin()) {
+            <div style="padding:1rem;background:#f8fafc;border-bottom:1px solid var(--border);">
+              <form [formGroup]="pForm" (ngSubmit)="addPromoter()">
+                <div class="row g-2 mb-2">
+                  <div class="col-md-4"><label class="form-label">Name *</label><input class="form-control" formControlName="promoterName" placeholder="Rahul Kumar" [class.is-invalid]="pf['promoterName'].invalid && pf['promoterName'].touched"><div class="invalid-feedback">Required</div></div>
+                  <div class="col-md-4"><label class="form-label">Mobile *</label><input class="form-control" formControlName="mobile" placeholder="9876543210" [class.is-invalid]="pf['mobile'].invalid && pf['mobile'].touched"><div class="invalid-feedback">Required</div></div>
+                  <div class="col-md-4"><label class="form-label">Ownership % *</label><input type="number" class="form-control" formControlName="ownershipPct" placeholder="100" min="0.01" max="100" [class.is-invalid]="pf['ownershipPct'].invalid && pf['ownershipPct'].touched"><div class="invalid-feedback">0–100</div></div>
+                </div>
+                <div style="display:flex;gap:.5rem;">
+                  <button type="submit" class="btn btn-success btn-sm" [disabled]="savingPromoter()">
+                    @if (savingPromoter()) { <span class="spinner-border spinner-border-sm"></span> } @else { <i class="bi bi-check2"></i> } Add
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="closePromoterForm()">Cancel</button>
+                </div>
+              </form>
+            </div>
+          }
+          <div class="card-body">
+            @if (promoters().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:1.5rem;"><i class="bi bi-people"></i><p>No promoters added</p></div> }
+            @for (p of promoters(); track p.promoterId) {
+              <div style="display:flex;align-items:center;gap:.875rem;padding:.75rem;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:.5rem;">
+                <div style="width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8125rem;flex-shrink:0;">{{ p.promoterName.charAt(0) }}</div>
+                <div style="flex:1;">
+                  <div style="font-weight:600;font-size:.875rem;">{{ p.promoterName }}</div>
+                  <div style="font-size:.75rem;color:var(--text-muted);">{{ p.mobile }} · {{ p.ownershipPct }}% ownership</div>
+                </div>
+                <span [class]="badgeClass(p.kycStatus)">{{ p.kycStatus }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-5">
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-lightning-charge"></i> Quick Actions</span></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:.5rem;">
+            <!-- KYC always viewable, even for admin -->
+            <a [routerLink]="['/kyc']" [queryParams]="{smeId: sme()!.smeId}" class="btn btn-outline-primary">
+              <i class="bi bi-person-vcard me-2"></i>View KYC
+            </a>
+            <!-- New Application disabled for admin -->
+            <a class="btn btn-outline-primary"
+               [class.disabled]="isAdmin()"
+               [routerLink]="isAdmin() ? null : ['/applications/new']"
+               [queryParams]="isAdmin() ? null : {smeId: sme()!.smeId}"
+               [title]="isAdmin() ? 'Admin cannot create applications' : 'New Loan Application'">
+              <i class="bi bi-file-earmark-plus me-2"></i>New Loan Application
+              @if (isAdmin()) { <i class="bi bi-lock-fill ms-1" style="font-size:.7rem;"></i> }
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>
+
+<!-- Edit SME Modal -->
+@if (showEditModal()) {
+  <div class="modal-backdrop" (click)="closeEditModal()"></div>
+  <div class="modal">
+    <div class="modal-dialog modal-dialog-lg">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit SME</h5><button class="btn-close" (click)="closeEditModal()">×</button></div>
+        <div class="modal-body">
+          <form [formGroup]="eForm">
+            <div class="row g-3">
+              <div class="col-md-6"><label class="form-label">Legal Name *</label><input class="form-control" formControlName="legalName" [class.is-invalid]="ef['legalName'].invalid && ef['legalName'].touched"><div class="invalid-feedback">Required</div></div>
+              <div class="col-md-6"><label class="form-label">Trade Name</label><input class="form-control" formControlName="tradeName"></div>
+              <div class="col-md-6">
+                <label class="form-label">Business Type *</label>
+                <select class="form-select" formControlName="businessType">
+                  @for (bt of bizTypes; track bt) { <option [value]="bt">{{ bt }}</option> }
+                </select>
+              </div>
+              <div class="col-md-6"><label class="form-label">Industry *</label><input class="form-control" formControlName="industry" [class.is-invalid]="ef['industry'].invalid && ef['industry'].touched"><div class="invalid-feedback">Required</div></div>
+              <div class="col-12"><label class="form-label">Address *</label><textarea class="form-control" formControlName="address" rows="2" [class.is-invalid]="ef['address'].invalid && ef['address'].touched"></textarea><div class="invalid-feedback">Required</div></div>
+              <div class="col-md-6"><label class="form-label">GST No.</label><input class="form-control font-mono" formControlName="gstNo" style="text-transform:uppercase;"></div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" (click)="closeEditModal()">Cancel</button>
+          <button class="btn btn-primary" (click)="saveEdit()" [disabled]="savingSme() || isAdmin()">
+            @if (savingSme()) { <span class="spinner-border spinner-border-sm"></span> }
+            @else if (isAdmin()) { <i class="bi bi-lock-fill"></i> }
+            @else { <i class="bi bi-save"></i> }
+            {{ isAdmin() ? 'Save Changes (Admin View-Only)' : 'Save Changes' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+}

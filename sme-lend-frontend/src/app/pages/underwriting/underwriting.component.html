@@ -1,0 +1,387 @@
+<div class="fade-in">
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-4">
+    <h4><i class="bi bi-clipboard2-check"></i> Underwriting</h4>
+    <p>Review and approve loan applications — cross-reference SME, KYC, Promoter and Documents</p>
+  </div>
+
+  @if (alertMsg()) {
+    <div class="alert mb-3" [class]="'alert-'+alertType()">
+      <i class="bi me-2" [class.bi-check-circle-fill]="alertType()==='success'"
+         [class.bi-exclamation-triangle-fill]="alertType()==='danger'"
+         [class.bi-exclamation-circle-fill]="alertType()==='warning'"></i>{{ alertMsg() }}
+    </div>
+  }
+
+  <div class="row g-3">
+    <!-- Queue Panel -->
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="card-title"><i class="bi bi-list-ul"></i> UW Queue ({{ queue().length }})</span>
+          <button class="btn btn-outline-secondary btn-sm" (click)="load()"><i class="bi bi-arrow-clockwise"></i></button>
+        </div>
+        @if (loading()) { <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div> }
+        @else if (queue().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2"><i class="bi bi-check-circle text-success" style="font-size:2rem;"></i><p>Queue is empty</p></div> }
+        @else {
+          <div style="padding:.5rem;">
+            @for (a of pgQueue.paged(); track a.applicationId) {
+              <div (click)="select(a)"
+                   [style.border]="selected()?.applicationId === a.applicationId ? '2px solid var(--primary)' : '1px solid var(--border)'"
+                   style="padding:.75rem;border-radius:.5rem;margin-bottom:.5rem;cursor:pointer;transition:all .15s;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:.25rem;">
+                  <span class="font-mono" style="font-weight:700;color:var(--primary);">#{{ a.applicationId }}</span>
+                  <span [class]="statusClass(a.status)" style="font-size:.68rem;">{{ a.status }}</span>
+                </div>
+                <div style="font-size:.82rem;font-weight:600;">{{ a.smeLegalName || 'SME #'+a.smeId }}</div>
+                <div style="font-size:.75rem;color:var(--text-muted);">₹{{ a.requestedAmount | number }} · {{ a.tenorMonths }}mo</div>
+                @if (a.submittedAt) {
+                  <div style="font-size:.7rem;color:var(--warning);margin-top:.2rem;">
+                    <i class="bi bi-clock me-1"></i>{{ a.submittedAt | date:'dd MMM' }}
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Detail + Decision Panel -->
+    <div class="col-lg-8">
+      @if (!selected()) {
+        <div class="card"><div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2"><i class="bi bi-arrow-left" style="font-size:2rem;"></i><p>Select an application from the queue to review</p></div></div>
+      } @else {
+
+        <!-- Sub-Tabs: Details | SME | KYC | Promoters | Docs -->
+        <div class="fs-tab-group mb-2">
+          <button class="fs-tab-btn" [class.active]="activeTab()==='details'" (click)="activeTab.set('details')"><i class="bi bi-info-circle me-1"></i>Details</button>
+          <button class="fs-tab-btn" [class.active]="activeTab()==='sme'" (click)="activeTab.set('sme')"><i class="bi bi-building me-1"></i>SME</button>
+          <button class="fs-tab-btn" [class.active]="activeTab()==='kyc'" (click)="activeTab.set('kyc')">
+            <i class="bi bi-person-vcard me-1"></i>KYC
+            @if (kycRecords().length > 0) { <span class="badge-status bs-draft ms-1" style="font-size:.6rem;">{{ kycRecords().length }}</span> }
+          </button>
+          <button class="fs-tab-btn" [class.active]="activeTab()==='promoters'" (click)="activeTab.set('promoters')"><i class="bi bi-people me-1"></i>Promoters</button>
+          <button class="fs-tab-btn" [class.active]="activeTab()==='scoring'" (click)="activeTab.set('scoring')">
+            <i class="bi bi-graph-up me-1"></i>Score &amp; Decision
+            @if (decision()) {
+              <span class="badge-status ms-1"
+                    [style.background]="decisionColor(decision()!.path)+'22'"
+                    [style.color]="decisionColor(decision()!.path)"
+                    style="font-size:.6rem;">{{ decision()!.path }}</span>
+            }
+          </button>
+          <button class="fs-tab-btn" [class.active]="activeTab()==='docs'" (click)="activeTab.set('docs')">
+            <i class="bi bi-paperclip me-1"></i>Docs
+            @if (documents().length > 0) { <span class="badge-status bs-pending ms-1" style="font-size:.6rem;">{{ documents().length }}</span> }
+          </button>
+        </div>
+
+        @let app = selected()!;
+
+        <!-- Details Tab -->
+        @if (activeTab() === 'details') {
+          <div class="card mb-3">
+            <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2">Application #{{ app.applicationId }}</span></div>
+            <div class="card-body">
+              <div class="info-row"><span class="info-label">SME</span><span class="info-value">{{ app.smeLegalName || '#'+app.smeId }}</span></div>
+              <div class="info-row"><span class="info-label">Product</span><span class="info-value">{{ app.productName || '#'+app.productId }}</span></div>
+              <div class="info-row"><span class="info-label">Amount</span><span class="info-value font-mono">₹{{ app.requestedAmount | number:'1.0-0' }}</span></div>
+              <div class="info-row"><span class="info-label">Tenor</span><span class="info-value">{{ app.tenorMonths }} months</span></div>
+              <div class="info-row"><span class="info-label">Purpose</span><span class="info-value">{{ app.purposeNote || '—' }}</span></div>
+              <div class="info-row"><span class="info-label">Submitted By</span><span class="info-value">{{ app.createdByEmail || '—' }}</span></div>
+              <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span [class]="statusClass(app.status)">{{ app.status }}</span></span></div>
+            </div>
+          </div>
+        }
+
+        <!-- SME Tab -->
+        @if (activeTab() === 'sme') {
+          <div class="card mb-3">
+            <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-building"></i> SME Details</span></div>
+            @if (loadingRef() && !smeDetail()) { <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div> }
+            @else if (smeDetail()) {
+              @let s = smeDetail()!;
+              <div class="card-body">
+                <div class="info-row"><span class="info-label">Legal Name</span><span class="info-value font-weight-bold">{{ s.legalName }}</span></div>
+                <div class="info-row"><span class="info-label">Trade Name</span><span class="info-value">{{ s.tradeName || '—' }}</span></div>
+                <div class="info-row"><span class="info-label">Business Type</span><span class="info-value">{{ s.businessType }}</span></div>
+                <div class="info-row"><span class="info-label">Industry</span><span class="info-value">{{ s.industry }}</span></div>
+                <div class="info-row"><span class="info-label">GST No</span><span class="info-value font-mono">{{ s.gstNo || '—' }}</span></div>
+                <div class="info-row"><span class="info-label">Address</span><span class="info-value">{{ s.address }}</span></div>
+                <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span [class]="statusClass(s.status)">{{ s.status }}</span></span></div>
+              </div>
+            } @else { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:1.5rem;"><p>SME data not available</p></div> }
+          </div>
+        }
+
+        <!-- KYC Tab -->
+        @if (activeTab() === 'kyc') {
+          <div class="card mb-3">
+            <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-person-vcard"></i> KYC Records</span></div>
+            @if (kycRecords().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:1.5rem;"><p>No KYC records for this SME</p></div> }
+            @else {
+              <div class="table-responsive">
+                <table class="table table-sm">
+                  <thead><tr><th>KYC ID</th><th>Promoter</th><th>Applicant</th><th>Status</th><th>Verified By</th><th>Notes</th></tr></thead>
+                  <tbody>
+                    @for (k of kycRecords(); track k.kycId) {
+                      <tr>
+                        <td class="font-mono" style="color:var(--primary);">#{{ k.kycId }}</td>
+                        <td style="font-size:.8rem;">{{ (k.promoters && k.promoters.length) ? k.promoters[0].promoterName : '—' }}</td>
+                        <td style="font-size:.8rem;">{{ k.applicantFullName || (k.applicantId ? '#'+k.applicantId : '—') }}</td>
+                        <td><span [class]="kycBadge(k.verificationStatus)">{{ k.verificationStatus }}</span></td>
+                        <td style="font-size:.75rem;color:var(--text-muted);">{{ k.verifiedByEmail || '—' }}</td>
+                        <td style="font-size:.75rem;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ k.notes || '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+            </table>
+          <app-paginator [pg]="pgQueue"></app-paginator>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Promoters Tab -->
+        @if (activeTab() === 'promoters') {
+          <div class="card mb-3">
+            <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-people"></i> Promoters</span></div>
+            @if (promoters().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:1.5rem;"><p>No promoters found</p></div> }
+            @else {
+              <div class="table-responsive">
+                <table class="table table-sm">
+                  <thead><tr><th>ID</th><th>Name</th><th>Mobile</th><th>Ownership</th><th>KYC</th></tr></thead>
+                  <tbody>
+                    @for (p of promoters(); track p.promoterId) {
+                      <tr>
+                        <td class="font-mono" style="color:var(--primary);">#{{ p.promoterId }}</td>
+                        <td style="font-weight:600;">{{ p.promoterName }}</td>
+                        <td class="font-mono" style="font-size:.82rem;">{{ p.mobile }}</td>
+                        <td>{{ p.ownershipPct }}%</td>
+                        <td><span [class]="kycBadge(p.kycStatus)">{{ p.kycStatus }}</span></td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Documents Tab — split Financial (UW analysis) vs KYC (identity) -->
+        @if (activeTab() === 'docs') {
+
+          <!-- Sub-tabs: Financial | KYC Identity -->
+          <div style="display:flex;gap:0;margin-bottom:.75rem;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+            <button style="flex:1;padding:.5rem;border:none;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;"
+                    [style.background]="docTab()==='financial'?'var(--primary)':'var(--surface)'"
+                    [style.color]="docTab()==='financial'?'#fff':'var(--text-muted)'"
+                    (click)="docTab.set('financial')">
+              <i class="bi bi-graph-up me-1"></i>Financial Analysis
+              <span style="margin-left:.35rem;font-size:.65rem;opacity:.85;">({{ finDocsCount() }}/{{ finDocMeta.length }})</span>
+            </button>
+            <button style="flex:1;padding:.5rem;border:none;border-left:1px solid var(--border);font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;"
+                    [style.background]="docTab()==='kyc'?'var(--primary)':'var(--surface)'"
+                    [style.color]="docTab()==='kyc'?'#fff':'var(--text-muted)'"
+                    (click)="docTab.set('kyc')">
+              <i class="bi bi-person-vcard me-1"></i>KYC Identity
+              <span style="margin-left:.35rem;font-size:.65rem;opacity:.85;">({{ kycDocsCount() }}/{{ kycDocMeta.length }})</span>
+            </button>
+          </div>
+
+          <!-- Financial Documents — primary UW analysis documents -->
+          @if (docTab() === 'financial') {
+            <div class="card mb-3">
+              <div class="card-header d-flex align-items-center justify-content-between">
+            <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-graph-up"></i> Financial Documents</span>
+                <span style="font-size:.72rem;color:var(--text-muted);">Cash flow · Income · Balance Sheet</span>
+              </div>
+              <div class="card-body" style="padding:0;">
+                <div class="uw-doc-checklist">
+                  @for (meta of finDocMeta; track meta.type) {
+                    <div class="uw-doc-row" [class.uw-doc-found]="hasDoc(meta.type)">
+                      <div class="uw-doc-status">
+                        @if (hasDoc(meta.type)) {
+                          <i class="bi bi-check-circle-fill" style="color:var(--success);font-size:1.1rem;"></i>
+                        } @else {
+                          <i class="bi bi-exclamation-circle" style="color:var(--warning);font-size:1.1rem;"></i>
+                        }
+                      </div>
+                      <div class="uw-doc-info">
+                        <div class="uw-doc-label">{{ meta.label }}</div>
+                        <div class="uw-doc-purpose">{{ meta.purpose }}</div>
+                      </div>
+                      @if (hasDoc(meta.type)) {
+                        @for (d of financialDocs(); track d.documentId) {
+                          @if (d.docType === meta.type) {
+                            <div class="uw-doc-actions">
+                              <button class="btn btn-outline-primary btn-sm" (click)="openPreview(d)" title="Preview">
+                                <i class="bi bi-eye"></i> Preview
+                              </button>
+                              @if (d.downloadUrl) {
+                                <button class="btn btn-outline-secondary btn-sm" (click)="downloadDoc(d)" title="Download">
+                                  <i class="bi bi-download"></i>
+                                </button>
+                              }
+                            </div>
+                          }
+                        }
+                      } @else {
+                        <div style="font-size:.72rem;color:var(--warning);white-space:nowrap;"><i class="bi bi-exclamation-triangle me-1"></i>Not uploaded</div>
+                      }
+                    </div>
+                  }
+                </div>
+                @if (financialDocs().length === 0) {
+                  <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:2rem;"><i class="bi bi-file-earmark-bar-graph" style="font-size:2rem;opacity:.3;"></i><p>No financial documents uploaded yet</p></div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- KYC Identity Documents — for reference during UW review -->
+          @if (docTab() === 'kyc') {
+            <div class="card mb-3">
+              <div class="card-header d-flex align-items-center justify-content-between">
+            <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-person-vcard"></i> KYC Identity Documents</span>
+                <span style="font-size:.72rem;color:var(--text-muted);">Verified by Agent — for reference</span>
+              </div>
+              <div class="card-body" style="padding:0;">
+                <div class="uw-doc-checklist">
+                  @for (meta of kycDocMeta; track meta.type) {
+                    <div class="uw-doc-row" [class.uw-doc-found]="hasDoc(meta.type)">
+                      <div class="uw-doc-status">
+                        @if (hasDoc(meta.type)) {
+                          <i class="bi bi-check-circle-fill" style="color:var(--success);font-size:1.1rem;"></i>
+                        } @else {
+                          <i class="bi bi-circle" style="color:var(--text-light);font-size:1.1rem;"></i>
+                        }
+                      </div>
+                      <div class="uw-doc-info">
+                        <div class="uw-doc-label">{{ meta.label }}</div>
+                        <div class="uw-doc-purpose">{{ meta.purpose }}</div>
+                      </div>
+                      @if (hasDoc(meta.type)) {
+                        @for (d of kycDocs(); track d.documentId) {
+                          @if (d.docType === meta.type) {
+                            <div class="uw-doc-actions">
+                              <button class="btn btn-outline-primary btn-sm" (click)="openPreview(d)" title="Preview">
+                                <i class="bi bi-eye"></i> Preview
+                              </button>
+                              @if (d.downloadUrl) {
+                                <button class="btn btn-outline-secondary btn-sm" (click)="downloadDoc(d)" title="Download">
+                                  <i class="bi bi-download"></i>
+                                </button>
+                              }
+                            </div>
+                          }
+                        }
+                      } @else {
+                        <div style="font-size:.72rem;color:var(--text-light);white-space:nowrap;">Not uploaded</div>
+                      }
+                    </div>
+                  }
+                </div>
+                @if (kycDocs().length === 0) {
+                  <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2" style="padding:2rem;"><i class="bi bi-person-vcard" style="font-size:2rem;opacity:.3;"></i><p>No KYC documents uploaded yet</p></div>
+                }
+              </div>
+            </div>
+          }
+        }
+
+
+        <!-- CIBIL Credit Assessment -->
+        <div class="card mb-3">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="card-title"><i class="bi bi-graph-up"></i> CIBIL Credit Assessment</span>
+            <button class="btn btn-outline-primary btn-sm" (click)="computeCibil()">
+              <i class="bi bi-calculator"></i> Calculate Score
+            </button>
+          </div>
+          @if (cibilScore()) {
+            <div class="card-body">
+              <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;">
+                <div style="text-align:center;">
+                  <div style="font-family:var(--font-head);font-size:2.5rem;font-weight:800;"
+                       [style.color]="cibilScore()!.score>=700?'var(--success)':cibilScore()!.score>=600?'var(--warning)':'var(--danger)'">
+                    {{ cibilScore()!.score }}
+                  </div>
+                  <div style="font-size:.72rem;font-weight:700;letter-spacing:.4px;text-transform:uppercase;"
+                       [style.color]="cibilScore()!.score>=700?'var(--success)':cibilScore()!.score>=600?'var(--warning)':'var(--danger)'">
+                    {{ cibilScore()!.label }}
+                  </div>
+                </div>
+                <div style="flex:1;">
+                  <div style="display:flex;justify-content:space-between;font-size:.78rem;font-weight:600;margin-bottom:.35rem;">
+                    <span>Poor (300)</span><span>Fair (650)</span><span>Excellent (900)</span>
+                  </div>
+                  <div class="pipeline-bar">
+                    <div class="pipeline-fill"
+                         [style.width]="((cibilScore()!.score - 300) / 600 * 100) + '%'"
+                         [style.background]="cibilScore()!.score>=700?'var(--success)':cibilScore()!.score>=600?'var(--warning)':'var(--danger)'">
+                    </div>
+                  </div>
+                  <div class="mt-2" style="font-size:.78rem;">
+                    @if (cibilScore()!.meetsThreshold) {
+                      <span class="badge-status bs-uw_approved"><i class="bi bi-check-circle me-1"></i>Meets product threshold</span>
+                    } @else {
+                      <span class="badge-status bs-uw_rejected"><i class="bi bi-exclamation-triangle me-1"></i>Below product threshold (min 650)</span>
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+          } @else {
+            <div class="card-body" style="color:var(--text-muted);font-size:.82rem;text-align:center;padding:1.5rem;">
+              Click "Calculate Score" to run a CIBIL assessment for this applicant
+            </div>
+          }
+        </div>
+
+        <!-- Decision Form (always visible when app selected) -->
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-gavel"></i> Make Decision</span></div>
+          <div class="card-body">
+            @if (scoreBlockReason) {
+              <div class="alert border-0 d-flex gap-2 rounded-3 mb-3"
+                   style="background:#fff5f5;border-left:4px solid #ef4444 !important;font-size:.82rem;">
+                <i class="bi bi-exclamation-triangle-fill mt-1" style="color:#ef4444;"></i>
+                <div><strong>Approval Restricted:</strong> {{ scoreBlockReason }}</div>
+              </div>
+            }
+            <form [formGroup]="form" (ngSubmit)="decide()">
+              <div class="mb-3">
+                <label class="form-label">Decision *</label>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                  @for (d of decisions; track d.value) {
+                    <label style="cursor:pointer;flex:1;min-width:100px;">
+                      <input type="radio" formControlName="decision" [value]="d.value" style="display:none;">
+                      <div class="btn w-100 btn-sm"
+                     [class]="f['decision'].value === d.value ? d.color : 'btn-outline-secondary'"
+                     [class.opacity-50]="d.value === 'APPROVE' && !canApprove"
+                     [class.pe-none]="d.value === 'APPROVE' && !canApprove">
+                        {{ d.label }}
+                      </div>
+                    </label>
+                  }
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Summary Note</label>
+                <textarea class="form-control" formControlName="summaryNote" rows="3" placeholder="Add reasoning or conditions…"></textarea>
+              </div>
+              <button type="submit" class="btn btn-primary w-100" [disabled]="deciding()">
+                @if (deciding()) { <span class="spinner-border spinner-border-sm"></span> Submitting… }
+                @else { <i class="bi bi-check-square"></i> Submit Decision }
+              </button>
+            </form>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+</div>
+
+<!-- Document Preview Modal -->
+<app-doc-preview [docData]="previewDoc()" (closed)="closePreview()"></app-doc-preview>
