@@ -53,6 +53,7 @@ public class PromoterService {
                 .aadhaarNumber(req.getAadhaarNumber())
                 .din(req.getDin())
                 .dateOfBirth(req.getDateOfBirth() != null ? java.time.LocalDate.parse(req.getDateOfBirth()) : null)
+                .monthlyIncome(req.getMonthlyIncome())
                 .kycStatus(KycStatus.PENDING)
                 .createdBy(me)
                 .build());
@@ -101,6 +102,7 @@ public class PromoterService {
                 .promoterName(p.getPromoterName())
                 .mobile(p.getMobile())
                 .ownershipPct(p.getOwnershipPct())
+                .monthlyIncome(p.getMonthlyIncome())
                 .email(p.getEmail())
                 .panNumber(p.getPanNumber())
                 .aadhaarNumber(p.getAadhaarNumber())

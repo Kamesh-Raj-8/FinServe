@@ -34,4 +34,8 @@ public class AddPromoterRequest {
 
     /** Date of birth (ISO format: yyyy-MM-dd) */
     private String dateOfBirth;
+
+    /** Monthly income in INR — used for income-based credit scoring */
+    @DecimalMin("0.00")
+    private java.math.BigDecimal monthlyIncome;
 }

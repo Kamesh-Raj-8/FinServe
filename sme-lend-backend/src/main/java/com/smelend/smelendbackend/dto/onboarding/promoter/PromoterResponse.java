@@ -19,6 +19,7 @@ public class PromoterResponse {
     private String din;
     private String dateOfBirth;
     private BigDecimal ownershipPct;
+    private BigDecimal monthlyIncome;
 
     private KycStatus kycStatus;
 

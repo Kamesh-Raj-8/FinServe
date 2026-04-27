@@ -75,16 +75,17 @@ export interface SmeResponse      { smeId: number; legalName: string; tradeName?
 
 // ── Promoter ───────────────────────────────────────────────────────
 export interface AddPromoterRequest {
-  promoterName:   string;
-  mobile:         string;
-  email?:         string;
-  ownershipPct:   number;
-  panNumber?:     string;
-  aadhaarNumber?: string;
-  din?:           string;
-  dateOfBirth?:   string;
+  promoterName:    string;
+  mobile:          string;
+  email?:          string;
+  ownershipPct:    number;
+  monthlyIncome:   number;
+  panNumber?:      string;
+  aadhaarNumber?:  string;
+  din?:            string;
+  dateOfBirth?:    string;
 }
-export interface PromoterResponse   { promoterId: number; smeId: number; promoterName: string; mobile: string; ownershipPct: number; kycStatus: KycStatus; createdByUserId?: number; createdByEmail?: string; }
+export interface PromoterResponse   { promoterId: number; smeId: number; promoterName: string; mobile: string; ownershipPct: number; monthlyIncome?: number; kycStatus: KycStatus; createdByUserId?: number; createdByEmail?: string; }
 
 // ── KYC ────────────────────────────────────────────────────────────
 /** Refactored: sme_id, promoter_id, applicant_id as explicit FK fields */

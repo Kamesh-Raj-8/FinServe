@@ -12,31 +12,36 @@ import org.springframework.http.HttpStatus;
 import com.smelend.smelendbackend.service.notification.NotificationService;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class CollectionsService {
 
-    private final LoanAccountRepository loanRepo;
-    private final DelinquencyRepository delinRepo;
-    private final PtpRepository ptpRepo;
-    private final CurrentUserService currentUserService;
-    private final DpdService dpdService;
-
-    private final NotificationService notificationService;
+    private final LoanAccountRepository        loanRepo;
+    private final DelinquencyRepository        delinRepo;
+    private final PtpRepository                ptpRepo;
+    private final RepaymentScheduleRepository  scheduleRepo;
+    private final CurrentUserService           currentUserService;
+    private final DpdService                   dpdService;
+    private final NotificationService          notificationService;
 
     public CollectionsService(LoanAccountRepository loanRepo,
                               DelinquencyRepository delinRepo,
                               PtpRepository ptpRepo,
+                              RepaymentScheduleRepository scheduleRepo,
                               CurrentUserService currentUserService,
                               DpdService dpdService,
-                               NotificationService notificationService) {
-        this.loanRepo = loanRepo;
-        this.delinRepo = delinRepo;
-        this.ptpRepo = ptpRepo;
-        this.currentUserService = currentUserService;
-        this.dpdService = dpdService;
+                              NotificationService notificationService) {
+        this.loanRepo            = loanRepo;
+        this.delinRepo           = delinRepo;
+        this.ptpRepo             = ptpRepo;
+        this.scheduleRepo        = scheduleRepo;
+        this.currentUserService  = currentUserService;
+        this.dpdService          = dpdService;
         this.notificationService = notificationService;
     }
 
@@ -50,8 +55,17 @@ public class CollectionsService {
     }
 
     public List<DelinquencyResponse> listAllDelinquencies() {
-        // compute not forced here (Phase-1)
-        return delinRepo.findAll().stream().map(this::toDelDto).toList();
+        // Negative check: find all loans that have overdue unpaid installments
+        // (dueDate < today AND status != PAID), compute/upsert their delinquency records.
+        Set<Long> delinquentLoanIds = scheduleRepo.findAllOverdue(LocalDate.now())
+                .stream()
+                .map(s -> s.getLoanAccount().getLoanAccountId())
+                .collect(Collectors.toSet());
+
+        return delinquentLoanIds.stream()
+                .map(dpdService::computeAndUpsert)
+                .map(this::toDelDto)
+                .toList();
     }
 
     public PtpResponse createPtp(CreatePtpRequest req) {

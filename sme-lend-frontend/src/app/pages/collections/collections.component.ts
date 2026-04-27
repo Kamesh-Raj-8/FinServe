@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject, computed } from '@angular/core';
+import { Component, OnInit, signal, inject, computed, Signal } from '@angular/core';
 import { paginate } from '../../core/services/pagination.service';
 import { PaginatorComponent } from '../../shared/paginator/paginator.component';
 import { CommonModule } from '@angular/common';
@@ -138,6 +138,13 @@ export class CollectionsComponent implements OnInit {
   loadingCharges = signal(false);
   chargeLoanId   = '';
   chargeType: ChargeType = 'PENAL';
+
+  /** ADMIN sees all fee types; COLLECTIONS (and others) are restricted to PENAL only. */
+  availableChargeTypes = computed<ChargeType[]>(() =>
+    this.auth.hasRole('ADMIN')
+      ? ['PENAL', 'PROCESSING', 'PREPAYMENT', 'INSURANCE', 'TECH', 'OTHER']
+      : ['PENAL']
+  );
   chargeAmount   = 0;
   chargeDesc     = '';
   postingCharge  = signal(false);

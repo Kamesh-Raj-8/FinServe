@@ -73,15 +73,15 @@ public class UnderwritingService {
 
         UwDecision decision = req.getDecision();
 
-        // ── CIBIL / Score Gate ──────────────────────────────────────
-        // LOW score: only REJECT is allowed; APPROVE is blocked at service level.
+        // ── Hard CIBIL constraint — cannot be overridden by underwriter ──
+        // Approval is blocked at system level if score < 700 (MEDIUM or below).
         if (decision == UwDecision.APPROVE) {
             scorecardRepo.findByApplication_ApplicationId(applicationId).ifPresent(sc -> {
-                if (sc.getScoreBand() == ScoreBand.LOW) {
+                if (sc.getScoreValue() < 700) {
                     throw new ApiException(HttpStatus.BAD_REQUEST,
                             "Cannot approve application #" + applicationId +
-                            ". Score band is LOW (" + sc.getScoreValue() + "). "
-                            + "Only REJECT or RETURN is allowed for low-score applications.");
+                            ". CIBIL score is " + sc.getScoreValue() + " (minimum required: 700). " +
+                            "This is a hard system constraint that cannot be manually overridden.");
                 }
             });
         }

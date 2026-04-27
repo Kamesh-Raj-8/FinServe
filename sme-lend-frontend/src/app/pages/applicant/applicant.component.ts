@@ -59,6 +59,7 @@ export class ApplicantComponent implements OnInit {
     mobile:         ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
     email:          [''],
     ownershipPct:   [null as number|null, [Validators.required, Validators.min(0.01), Validators.max(100)]],
+    monthlyIncome:  [null as number|null, [Validators.required, Validators.min(0)]],
     panNumber:      ['', Validators.pattern(/^[A-Z]{5}[0-9]{4}[A-Z]$/)],
     aadhaarNumber:  ['', Validators.pattern(/^[0-9]{12}$/)],
     din:            [''],
@@ -207,7 +208,7 @@ export class ApplicantComponent implements OnInit {
     this.savingPromoter.set(true);
     const v = this.promoterForm.value;
     this.api.addPromoter(this.selectedSme()!.smeId, {
-      promoterName: v.promoterName!, mobile: v.mobile!, ownershipPct: v.ownershipPct!
+      promoterName: v.promoterName!, mobile: v.mobile!, ownershipPct: v.ownershipPct!, monthlyIncome: v.monthlyIncome!
     }).subscribe({
       next: r => {
         this.savingPromoter.set(false);

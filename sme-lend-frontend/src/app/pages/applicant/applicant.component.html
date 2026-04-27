@@ -218,6 +218,12 @@
                              [class.invalid]="pf['ownershipPct'].invalid && pf['ownershipPct'].touched">
                       @if (pf['ownershipPct'].invalid && pf['ownershipPct'].touched) { <span class="field-err">0–100</span> }
                     </div>
+                    <div class="field-group">
+                      <label class="field-label">Monthly Income (₹) *</label>
+                      <input type="number" class="field-input" formControlName="monthlyIncome" placeholder="e.g. 50000" min="0"
+                             [class.invalid]="pf['monthlyIncome'].invalid && pf['monthlyIncome'].touched">
+                      @if (pf['monthlyIncome'].invalid && pf['monthlyIncome'].touched) { <span class="field-err">Required</span> }
+                    </div>
                   <div class="field-group">
                     <label class="field-label">Email <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
                     <input type="email" class="field-input" formControlName="email" placeholder="promoter@company.com">

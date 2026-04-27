@@ -1,3 +1,3 @@
 package com.smelend.smelendbackend.entity.enums;
-/** Risk band derived from scoreValue. */
-public enum ScoreBand { LOW, MEDIUM, HIGH, EXCELLENT }
+/** Risk band derived from income adequacy check. */
+public enum ScoreBand { LOW, MEDIUM, HIGH, EXCELLENT, POOR }

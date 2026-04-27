@@ -57,6 +57,7 @@
                   <div class="col-md-4"><label class="form-label">Name *</label><input class="form-control" formControlName="promoterName" placeholder="Rahul Kumar" [class.is-invalid]="pf['promoterName'].invalid && pf['promoterName'].touched"><div class="invalid-feedback">Required</div></div>
                   <div class="col-md-4"><label class="form-label">Mobile *</label><input class="form-control" formControlName="mobile" placeholder="9876543210" [class.is-invalid]="pf['mobile'].invalid && pf['mobile'].touched"><div class="invalid-feedback">Required</div></div>
                   <div class="col-md-4"><label class="form-label">Ownership % *</label><input type="number" class="form-control" formControlName="ownershipPct" placeholder="100" min="0.01" max="100" [class.is-invalid]="pf['ownershipPct'].invalid && pf['ownershipPct'].touched"><div class="invalid-feedback">0–100</div></div>
+                  <div class="col-md-4"><label class="form-label">Monthly Income (₹) *</label><input type="number" class="form-control" formControlName="monthlyIncome" placeholder="e.g. 50000" min="0" [class.is-invalid]="pf['monthlyIncome'].invalid && pf['monthlyIncome'].touched"><div class="invalid-feedback">Required</div></div>
                 </div>
                 <div style="display:flex;gap:.5rem;">
                   <button type="submit" class="btn btn-success btn-sm" [disabled]="savingPromoter()">
@@ -133,7 +134,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" (click)="closeEditModal()">Cancel</button>
-          <button class="btn btn-primary" (click)="saveEdit()" [disabled]="savingSme() || isAdmin()">
+          <button class="btn btn-primary" (click)="saveSme()" [disabled]="savingSme() || isAdmin()">
             @if (savingSme()) { <span class="spinner-border spinner-border-sm"></span> }
             @else if (isAdmin()) { <i class="bi bi-lock-fill"></i> }
             @else { <i class="bi bi-save"></i> }

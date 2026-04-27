@@ -11,155 +11,228 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * Scoring + Auto-Decisioning Engine.
  *
- * Called when an application is submitted.
- * 1. Compute risk scorecard (deterministic weighted model, Phase-1 proxy).
- * 2. Run eligibility checks.
- * 3. Produce a Decision record that routes the application:
- *    - EXCELLENT score (≥800) + all rules pass → AUTO_APPROVE
- *      (HIGH, MEDIUM, LOW all go to ROUTE_TO_UW for human review)
- *    - Any eligibility failure → AUTO_DECLINE
- *    - Medium/Low score → ROUTE_TO_UW for human review
+ * Pipeline (runs once when an application is submitted via scoreAndDecide):
+ *
+ *   Step 1 — Income adequacy check (ScoreBand)
+ *             Primary promoter annualised income vs. product.minIncomeAmount.
+ *             EXCELLENT : annualisedIncome >= minIncomeAmount  (income-eligible)
+ *             POOR      : anything else, including missing data (conservative default)
+ *
+ *   Step 2 — Weighted scoreValue (300–900, deterministic):
+ *             40 % leverage  — requestedAmount / product.maxAmount
+ *             30 % tenor     — tenorMonths / product.maxTenorMonths
+ *             30 % income    — annualisedIncome / minIncomeAmount  (capped at 1.0)
+ *             Higher income + lower leverage/tenor = higher score.
+ *             Hard ceiling: POOR-band applications are capped at 699 to preserve
+ *             the invariant that UnderwritingService's 700-floor always blocks them.
+ *
+ *   Step 3 — Eligibility rules (product amount cap, tenor range, custom policies)
+ *
+ *   Step 4 — Routing:
+ *             EXCELLENT band + score >= 750 + eligibility passes → AUTO_APPROVE
+ *             Any eligibility failure                             → AUTO_DECLINE
+ *             All other cases (POOR band, score 700–749)         → ROUTE_TO_UW
+ *
+ * Note: UnderwritingService independently hard-blocks UW approval when score < 700.
+ *       The POOR-band cap at 699 ensures those two constraints are always consistent.
  */
 @Service
 public class DecisionEngine {
 
-    private final ScorecardRepository    scorecardRepo;
-    private final DecisionRepository     decisionRepo;
+    private final ScorecardRepository       scorecardRepo;
+    private final DecisionRepository        decisionRepo;
     private final LoanApplicationRepository appRepo;
-    private final EligibilityService     eligibilityService;
+    private final EligibilityService        eligibilityService;
+    private final PromoterRepository        promoterRepo;
 
     public DecisionEngine(ScorecardRepository scorecardRepo,
-                           DecisionRepository decisionRepo,
-                           LoanApplicationRepository appRepo,
-                           EligibilityService eligibilityService) {
+                          DecisionRepository decisionRepo,
+                          LoanApplicationRepository appRepo,
+                          EligibilityService eligibilityService,
+                          PromoterRepository promoterRepo) {
         this.scorecardRepo      = scorecardRepo;
         this.decisionRepo       = decisionRepo;
         this.appRepo            = appRepo;
         this.eligibilityService = eligibilityService;
+        this.promoterRepo       = promoterRepo;
     }
 
-    // ── Score + Decide (called at submission) ─────────────────────────
+    // ── Public API ────────────────────────────────────────────────────
 
     @Transactional
     public DecisionResponse scoreAndDecide(Long applicationId) {
         LoanApplication app = appRepo.findById(applicationId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Application not found"));
 
-        // Idempotent
+        // Idempotent: if a decision already exists, return it without re-running the engine
         return decisionRepo.findByApplication_ApplicationId(applicationId)
                 .map(this::toDecisionDto)
                 .orElseGet(() -> runEngine(app));
     }
 
+    public ScorecardResponse getScorecardByApplication(Long applicationId) {
+        return scorecardRepo.findByApplication_ApplicationId(applicationId)
+                .map(this::toScoreDto)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "Scorecard not found for application #" + applicationId));
+    }
+
+    public DecisionResponse getDecisionByApplication(Long applicationId) {
+        return decisionRepo.findByApplication_ApplicationId(applicationId)
+                .map(this::toDecisionDto)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                        "Decision not found for application #" + applicationId));
+    }
+
+    // ── Engine ────────────────────────────────────────────────────────
+
     private DecisionResponse runEngine(LoanApplication app) {
-        Long appId = app.getApplicationId();
 
-        // ── Step 1: Compute scorecard (idempotent — update if exists) ──
-        Scorecard sc = computeScorecard(app);
-        scorecardRepo.findByApplication_ApplicationId(app.getApplicationId())
-                .ifPresentOrElse(existing -> {
-                    existing.setScoreValue(sc.getScoreValue());
-                    existing.setScoreBand(sc.getScoreBand());
-                    existing.setInputsJson(sc.getInputsJson());
-                    existing.setScoredAt(sc.getScoredAt());
-                    scorecardRepo.save(existing);
-                    sc.setScoreId(existing.getScoreId());
-                }, () -> scorecardRepo.save(sc));
+        // Step 1 + 2: Score (income adequacy + weighted formula)
+        Scorecard sc = buildScorecard(app);
+        scorecardRepo.save(sc);
 
-        // ── Step 2: Eligibility check ─────────────────────────────────
-        var eligibility = eligibilityService.checkApplication(appId);
-        List<String> triggeredRules = new ArrayList<>(eligibility.getFailedRules());
+        // Step 3: Eligibility
+        var eligibility = eligibilityService.checkApplication(app.getApplicationId());
 
-        // ── Step 3: Route decision ─────────────────────────────────────
-        DecisionPath path;
-        String reason;
+        // Step 4: Route
+        DecisionPath    path;
+        ApplicationStatus newStatus;
+        String          reason;
 
         if (!eligibility.isEligible()) {
-            path   = DecisionPath.AUTO_DECLINE;
-            reason = "Eligibility check failed: " + eligibility.getSummary();
-        } else if (sc.getScoreValue() >= 750) {
-            // Threshold: HIGH/EXCELLENT (≥750) + full eligibility → auto-approve.
-            // Bypasses manual UW queue; offer is generated automatically in ApplicationService.
-            path   = DecisionPath.AUTO_APPROVE;
-            reason = "Score " + sc.getScoreValue() + " (" + sc.getScoreBand()
-                     + " ≥750) + full eligibility — auto-approved, offer will be generated.";
-            app.setStatus(ApplicationStatus.AUTO_APPROVED);
-            appRepo.save(app);
+            path      = DecisionPath.AUTO_DECLINE;
+            newStatus = ApplicationStatus.UW_REJECTED;
+            reason    = "Eligibility failed: " + eligibility.getSummary();
+
+        } else if (sc.getScoreBand() == ScoreBand.EXCELLENT && sc.getScoreValue() >= 750) {
+            path      = DecisionPath.AUTO_APPROVE;
+            newStatus = ApplicationStatus.AUTO_APPROVED;
+            reason    = "Income adequate, score " + sc.getScoreValue()
+                        + " (EXCELLENT, ≥750) — auto-approved.";
+
         } else {
-            // LOW (<600) and MEDIUM (600-749) → human underwriter review required.
-            path   = DecisionPath.ROUTE_TO_UW;
-            reason = "Score " + sc.getScoreValue() + " (" + sc.getScoreBand() + ") — routed to underwriter.";
+            path      = DecisionPath.ROUTE_TO_UW;
+            newStatus = ApplicationStatus.ROUTED_TO_UW;
+            reason    = buildUwReason(sc);
         }
+
+        app.setStatus(newStatus);
+        appRepo.save(app);
 
         Decision decision = Decision.builder()
                 .application(app)
                 .path(path)
                 .reason(reason)
-                .triggeredRules(String.join("; ", triggeredRules))
+                .triggeredRules(String.join("; ", eligibility.getFailedRules()))
                 .decidedAt(LocalDateTime.now())
                 .build();
 
         return toDecisionDto(decisionRepo.save(decision));
     }
 
-    /**
-     * Deterministic scoring model (Phase-1 proxy).
-     * Production: replace with ML model call / bureau integration.
-     *
-     * Score = 300–900 weighted:
-     *   40% leverage ratio (requestedAmount / maxAmount)
-     *   30% tenor ratio (tenorMonths / maxTenor) — shorter = less risk
-     *   30% entity seed (stable per applicationId)
-     */
-    Scorecard computeScorecard(LoanApplication app) {
+    // ── Scorecard builder ─────────────────────────────────────────────
+
+    private Scorecard buildScorecard(LoanApplication app) {
         LoanProduct prod = app.getProduct();
-        double leverage  = app.getRequestedAmount().doubleValue() / prod.getMaxAmount().doubleValue();
-        double tenorRatio = (double) app.getTenorMonths() / prod.getMaxTenorMonths();
-        double seed      = Math.abs(Math.sin(app.getApplicationId() * 6364136.0)) * 0.3;
 
-        int raw = (int) (900 - (leverage * 240) - (tenorRatio * 180) + (seed * 60));
-        int score = Math.max(300, Math.min(900, raw));
+        // ── Income adequacy (ScoreBand) ──────────────────────────────
+        Promoter  primary         = findPrimaryPromoter(app);
+        BigDecimal annualisedIncome = annualise(primary);
+        BigDecimal minIncome        = prod.getMinIncomeAmount();
 
-        ScoreBand band;
-        if      (score >= 800) band = ScoreBand.EXCELLENT;
-        else if (score >= 700) band = ScoreBand.HIGH;
-        else if (score >= 600) band = ScoreBand.MEDIUM;
-        else                   band = ScoreBand.LOW;
+        boolean incomeAdequate = minIncome != null
+                && minIncome.compareTo(BigDecimal.ZERO) > 0
+                && annualisedIncome.compareTo(minIncome) >= 0;
 
-        String inputs = String.format(
-            "{\"requestedAmount\":%s,\"tenorMonths\":%d,\"productId\":%d,\"leverage\":%.2f,\"tenorRatio\":%.2f}",
-            app.getRequestedAmount().toPlainString(), app.getTenorMonths(),
-            prod.getProductId(), leverage, tenorRatio);
+        ScoreBand band = incomeAdequate ? ScoreBand.EXCELLENT : ScoreBand.POOR;
+
+        // ── Weighted score (300–900) ─────────────────────────────────
+        double leverage    = safeDivide(app.getRequestedAmount(), prod.getMaxAmount());
+        double tenorRatio  = safeDivide(app.getTenorMonths(), prod.getMaxTenorMonths());
+        double incomeRatio = (minIncome != null && minIncome.compareTo(BigDecimal.ZERO) > 0)
+                ? Math.min(1.0, annualisedIncome.doubleValue() / minIncome.doubleValue())
+                : 0.0;
+
+        // Formula: 900 base, subtract leverage/tenor risk, add income benefit, apply offset
+        //   leverage  40% weight — max penalty -240
+        //   tenor     30% weight — max penalty -180
+        //   income    30% weight — max benefit +180
+        //   offset    -180       — anchors neutral mid-risk case to ~600
+        double raw   = 900 - (leverage * 240) - (tenorRatio * 180) + (incomeRatio * 180) - 180;
+        int    score = Math.max(300, Math.min(900, (int) Math.round(raw)));
+
+        // Hard cap: POOR-band applications cannot exceed 699.
+        // This guarantees the UnderwritingService 700-floor always blocks them,
+        // regardless of how favourable the leverage/tenor values are.
+        if (band == ScoreBand.POOR) {
+            score = Math.min(score, 699);
+        }
+
+        String inputsJson = String.format(
+                "{\"requestedAmount\":%s,\"tenorMonths\":%d,\"productId\":%d,"
+                + "\"leverage\":%.3f,\"tenorRatio\":%.3f,"
+                + "\"annualisedIncome\":%s,\"minIncomeAmount\":%s,"
+                + "\"incomeRatio\":%.3f,\"band\":\"%s\"}",
+                app.getRequestedAmount().toPlainString(),
+                app.getTenorMonths(),
+                prod.getProductId(),
+                leverage, tenorRatio,
+                annualisedIncome.toPlainString(),
+                minIncome != null ? minIncome.toPlainString() : "null",
+                incomeRatio,
+                band.name());
 
         return Scorecard.builder()
                 .application(app)
-                .modelVersion("v1.0-phase1")
-                .inputsJson(inputs)
+                .modelVersion("v2.0-income-weighted")
+                .inputsJson(inputsJson)
                 .scoreValue(score)
                 .scoreBand(band)
                 .scoredAt(LocalDateTime.now())
                 .build();
     }
 
-    // ── Query ─────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────
 
-    public ScorecardResponse getScorecardByApplication(Long applicationId) {
-        return scorecardRepo.findByApplication_ApplicationId(applicationId)
-                .map(this::toScoreDto)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Scorecard not found for application #" + applicationId));
+    private Promoter findPrimaryPromoter(LoanApplication app) {
+        List<Promoter> promoters = promoterRepo.findBySme_SmeId(app.getSme().getSmeId());
+        if (promoters.isEmpty()) return null;
+        return promoters.stream()
+                .max(Comparator.comparing(Promoter::getOwnershipPct))
+                .orElse(promoters.get(0));
     }
 
-    public DecisionResponse getDecisionByApplication(Long applicationId) {
-        return decisionRepo.findByApplication_ApplicationId(applicationId)
-                .map(this::toDecisionDto)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Decision not found for application #" + applicationId));
+    private BigDecimal annualise(Promoter promoter) {
+        if (promoter == null || promoter.getMonthlyIncome() == null) return BigDecimal.ZERO;
+        return promoter.getMonthlyIncome().multiply(BigDecimal.valueOf(12));
+    }
+
+    private double safeDivide(BigDecimal numerator, BigDecimal denominator) {
+        if (denominator == null || denominator.compareTo(BigDecimal.ZERO) == 0) return 0.0;
+        return numerator.divide(denominator, 6, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    private double safeDivide(int numerator, int denominator) {
+        return denominator == 0 ? 0.0 : (double) numerator / denominator;
+    }
+
+    private String buildUwReason(Scorecard sc) {
+        if (sc.getScoreBand() == ScoreBand.POOR) {
+            return "Income inadequate (POOR band, score " + sc.getScoreValue()
+                   + ") — routed to underwriter. Note: UW approval blocked for score < 700.";
+        }
+        return "Income adequate (EXCELLENT band) but score " + sc.getScoreValue()
+               + " is below 750 threshold — routed to underwriter for manual review.";
     }
 
     // ── Mappers ───────────────────────────────────────────────────────

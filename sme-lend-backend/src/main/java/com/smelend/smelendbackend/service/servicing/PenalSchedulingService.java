@@ -60,10 +60,10 @@ public class PenalSchedulingService {
     }
 
     /**
-     * Runs at 01:00 every night.
+     * Runs at midnight every night.
      * Processes all ACTIVE loans that have overdue installments.
      */
-    @Scheduled(cron = "0 0 1 * * *")
+    @Scheduled(cron = "0 0 0 * * *")
     @Transactional
     public void processOverdueInstallments() {
         LocalDate today = LocalDate.now();

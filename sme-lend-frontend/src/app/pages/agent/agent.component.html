@@ -192,6 +192,12 @@
                       <input type="number" class="form-control" formControlName="ownershipPct" placeholder="100"
                              [class.is-invalid]="pf['ownershipPct'].invalid && pf['ownershipPct'].touched">
                     </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Monthly Income (₹) *</label>
+                      <input type="number" class="form-control" formControlName="monthlyIncome" placeholder="e.g. 50000" min="0"
+                             [class.is-invalid]="pf['monthlyIncome'].invalid && pf['monthlyIncome'].touched">
+                      <div class="invalid-feedback">Required</div>
+                    </div>
                   </div>
                   <div class="mb-2">
                     <label class="form-label">Email <small class="text-muted">(optional)</small></label>

@@ -47,6 +47,9 @@ public class Promoter {
     @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal ownershipPct;
 
+    @Column(name = "monthly_income", precision = 15, scale = 2)
+    private BigDecimal monthlyIncome;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private KycStatus kycStatus;
