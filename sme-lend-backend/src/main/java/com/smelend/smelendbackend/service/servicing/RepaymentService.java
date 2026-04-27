@@ -101,7 +101,7 @@ public class RepaymentService {
 
             // ── Overpayment guard ─────────────────────────────────────────────
             BigDecimal outstandingBalance = scheduleRepo
-                    .findUnpaidByLoan(loan.getLoanAccountId())
+                    .findUnpaidByLoan(loan.getLoanAccountId(), InstallmentStatus.PAID)
                     .stream()
                     .map(s -> s.getBalanceDue() != null ? s.getBalanceDue() : s.getTotalDue())
                     .reduce(BigDecimal.ZERO, BigDecimal::add)

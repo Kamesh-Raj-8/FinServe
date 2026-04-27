@@ -86,7 +86,7 @@ public class PenalSchedulingService {
     @Transactional
     public void processLoan(LoanAccount loan, LocalDate asOfDate) {
         List<RepaymentSchedule> overdue = scheduleRepo.findOverdueByLoan(
-                loan.getLoanAccountId(), asOfDate);
+                loan.getLoanAccountId(), asOfDate, InstallmentStatus.PAID);
 
         if (overdue.isEmpty()) return;
 

@@ -105,12 +105,14 @@ export class CollectionsComponent implements OnInit {
   }
 
   bucketColor(bucket: string): string {
-    const b = bucket?.toUpperCase();
-    if (b === 'X' || b === 'CURRENT') return 'bs-verified';
-    if (b === '1-30') return 'bs-pending';
-    if (b === '31-60') return 'bs-draft';
-    if (b === '61-90') return 'bs-rejected';
-    return 'bs-rejected';
+    switch (bucket) {
+      case 'CURRENT':    return 'bs-verified';
+      case 'DPD_1_30':   return 'bs-pending';
+      case 'DPD_31_60':  return 'bs-draft';
+      case 'DPD_61_90':  return 'bs-rejected';
+      case 'DPD_90_PLUS': return 'bs-rejected';
+      default:           return 'bs-inactive';
+    }
   }
 
   ptpBadge(s: PtpStatus): string {

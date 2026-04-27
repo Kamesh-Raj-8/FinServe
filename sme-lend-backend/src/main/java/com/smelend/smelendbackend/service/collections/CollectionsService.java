@@ -4,19 +4,19 @@ import com.smelend.smelendbackend.dto.collections.CreatePtpRequest;
 import com.smelend.smelendbackend.dto.collections.DelinquencyResponse;
 import com.smelend.smelendbackend.dto.collections.PtpResponse;
 import com.smelend.smelendbackend.entity.*;
+import com.smelend.smelendbackend.entity.enums.InstallmentStatus;
 import com.smelend.smelendbackend.entity.enums.PtpStatus;
 import com.smelend.smelendbackend.exception.ApiException;
 import com.smelend.smelendbackend.repository.*;
 import com.smelend.smelendbackend.service.common.CurrentUserService;
-import org.springframework.http.HttpStatus;
 import com.smelend.smelendbackend.service.notification.NotificationService;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 public class CollectionsService {
@@ -48,22 +48,32 @@ public class CollectionsService {
     public DelinquencyResponse getDelinquency(Long loanAccountId) {
         loanRepo.findById(loanAccountId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Loan account not found"));
-
-        // compute fresh each time (Phase-1)
         Delinquency del = dpdService.computeAndUpsert(loanAccountId);
         return toDelDto(del);
     }
 
+    /**
+     * Returns all delinquency records in the system.
+     *
+     * Two-pass approach:
+     *   Pass 1 — identify any loan with a currently overdue unpaid schedule and
+     *             refresh (or create) its delinquency record via DpdService.
+     *             This catches new overdue loans that the nightly scheduler hasn't
+     *             processed yet.
+     *   Pass 2 — return ALL rows from the delinquency table, so records already
+     *             populated by the scheduler are always included in the response.
+     */
+    @Transactional
     public List<DelinquencyResponse> listAllDelinquencies() {
-        // Negative check: find all loans that have overdue unpaid installments
-        // (dueDate < today AND status != PAID), compute/upsert their delinquency records.
-        Set<Long> delinquentLoanIds = scheduleRepo.findAllOverdue(LocalDate.now())
-                .stream()
-                .map(s -> s.getLoanAccount().getLoanAccountId())
-                .collect(Collectors.toSet());
+        LocalDate today = LocalDate.now();
 
-        return delinquentLoanIds.stream()
-                .map(dpdService::computeAndUpsert)
+        // Pass 1: refresh DPD for any loan that currently has an overdue unpaid installment
+        scheduleRepo.findAllOverdueLoanIds(today, InstallmentStatus.PAID)
+                .forEach(dpdService::computeAndUpsert);
+
+        // Pass 2: return everything in the delinquency table
+        return delinRepo.findAll()
+                .stream()
                 .map(this::toDelDto)
                 .toList();
     }
@@ -85,7 +95,6 @@ public class CollectionsService {
                 .createdDate(LocalDateTime.now())
                 .build());
 
-        // Notify borrower if loan account links back to applicant
         if (loan.getApplication() != null && loan.getApplication().getCreatedBy() != null) {
             AppUser borrower = loan.getApplication().getCreatedBy();
             notificationService.notifyPtpCreated(
@@ -100,7 +109,6 @@ public class CollectionsService {
     public List<PtpResponse> listPtps(Long loanAccountId) {
         loanRepo.findById(loanAccountId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Loan account not found"));
-
         return ptpRepo.findByLoanAccount_LoanAccountIdOrderByCreatedDateDesc(loanAccountId)
                 .stream().map(this::toPtpDto).toList();
     }
@@ -111,7 +119,6 @@ public class CollectionsService {
 
         Ptp ptp = ptpRepo.findById(ptpId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PTP not found"));
-
         ptp.setStatus(status);
         return toPtpDto(ptpRepo.save(ptp));
     }

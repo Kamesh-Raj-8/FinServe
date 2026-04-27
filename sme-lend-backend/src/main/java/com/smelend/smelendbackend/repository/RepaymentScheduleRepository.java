@@ -8,26 +8,42 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 public interface RepaymentScheduleRepository extends JpaRepository<RepaymentSchedule, Long> {
 
     List<RepaymentSchedule> findByLoanAccount_LoanAccountIdOrderByInstallmentNoAsc(Long loanAccountId);
 
-    /** First unpaid installment for a loan account */
-    @Query("SELECT s FROM RepaymentSchedule s WHERE s.loanAccount.loanAccountId = :loanId "
-         + "AND s.status != 'PAID' ORDER BY s.installmentNo ASC")
-    List<RepaymentSchedule> findUnpaidByLoan(@Param("loanId") Long loanId);
-
-    /** All overdue installments (dueDate < today AND not PAID) across all loans */
+    /** Unpaid installments for a specific loan, oldest first */
     @Query("SELECT s FROM RepaymentSchedule s "
-         + "WHERE s.dueDate < :today AND s.status != 'PAID'")
-    List<RepaymentSchedule> findAllOverdue(@Param("today") LocalDate today);
+         + "WHERE s.loanAccount.loanAccountId = :loanId "
+         + "AND s.status <> :paidStatus "
+         + "ORDER BY s.installmentNo ASC")
+    List<RepaymentSchedule> findUnpaidByLoan(@Param("loanId") Long loanId,
+                                              @Param("paidStatus") InstallmentStatus paidStatus);
+
+    /**
+     * Distinct loan account IDs that have at least one overdue unpaid installment.
+     * Used by listAllDelinquencies() to identify which loans need a DPD refresh.
+     */
+    @Query("SELECT DISTINCT s.loanAccount.loanAccountId FROM RepaymentSchedule s "
+         + "WHERE s.dueDate < :today AND s.status <> :paidStatus")
+    List<Long> findAllOverdueLoanIds(@Param("today") LocalDate today,
+                                     @Param("paidStatus") InstallmentStatus paidStatus);
+
+    /**
+     * All overdue installments across all loans, with loanAccount eagerly joined.
+     * Used by PenalSchedulingService.
+     */
+    @Query("SELECT s FROM RepaymentSchedule s JOIN FETCH s.loanAccount "
+         + "WHERE s.dueDate < :today AND s.status <> :paidStatus")
+    List<RepaymentSchedule> findAllOverdue(@Param("today") LocalDate today,
+                                           @Param("paidStatus") InstallmentStatus paidStatus);
 
     /** Overdue installments for a specific loan */
     @Query("SELECT s FROM RepaymentSchedule s "
          + "WHERE s.loanAccount.loanAccountId = :loanId "
-         + "AND s.dueDate < :today AND s.status != 'PAID'")
+         + "AND s.dueDate < :today AND s.status <> :paidStatus")
     List<RepaymentSchedule> findOverdueByLoan(@Param("loanId") Long loanId,
-                                               @Param("today") LocalDate today);
+                                               @Param("today") LocalDate today,
+                                               @Param("paidStatus") InstallmentStatus paidStatus);
 }
