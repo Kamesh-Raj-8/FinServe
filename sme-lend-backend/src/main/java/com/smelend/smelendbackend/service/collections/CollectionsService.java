@@ -66,12 +66,13 @@ public class CollectionsService {
     @Transactional
     public List<DelinquencyResponse> listAllDelinquencies() {
         LocalDate today = LocalDate.now();
-
-        // Pass 1: refresh DPD for any loan that currently has an overdue unpaid installment
-        scheduleRepo.findAllOverdueLoanIds(today, InstallmentStatus.PAID)
-                .forEach(dpdService::computeAndUpsert);
-
-        // Pass 2: return everything in the delinquency table
+        
+        // Refresh DPD for every loan account
+        loanRepo.findAll().forEach(loan -> {
+            Delinquency del = dpdService.computeAndUpsert(loan.getLoanAccountId());
+        });
+        
+        // Return everything in the delinquency table
         return delinRepo.findAll()
                 .stream()
                 .map(this::toDelDto)

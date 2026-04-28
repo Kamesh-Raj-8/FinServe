@@ -11,6 +11,7 @@ import com.smelend.smelendbackend.repository.*;
 import com.smelend.smelendbackend.service.common.CurrentUserService;
 import com.smelend.smelendbackend.service.compliance.AuditLogService;
 import com.smelend.smelendbackend.service.servicing.EmiScheduleService;
+
 import org.springframework.http.HttpStatus;
 import com.smelend.smelendbackend.service.notification.NotificationService;
 import com.smelend.smelendbackend.service.fee.FeeService;
@@ -21,11 +22,13 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Service
 public class DisbursementService {
 
     private final DisbursementRepository disbRepo;
+    private final DelinquencyRepository delinRepo;
     private final LoanAccountRepository loanRepo;
     private final LoanApplicationRepository appRepo;
     private final OfferRepository offerRepo;
@@ -38,15 +41,16 @@ public class DisbursementService {
     private final ChargeService        chargeService;
 
     public DisbursementService(DisbursementRepository disbRepo,
-                               LoanAccountRepository loanRepo,
-                               LoanApplicationRepository appRepo,
-                               OfferRepository offerRepo,
-                               CurrentUserService currentUserService,
-                               EmiScheduleService emiScheduleService,
-                               AuditLogService auditLogService,
-                                  NotificationService notificationService,
-                                  FeeService feeService,
-                                  ChargeService chargeService) {
+                           LoanAccountRepository loanRepo,
+                           LoanApplicationRepository appRepo,
+                           OfferRepository offerRepo,
+                           CurrentUserService currentUserService,
+                           EmiScheduleService emiScheduleService,
+                           AuditLogService auditLogService,
+                           NotificationService notificationService,
+                           FeeService feeService,
+                           ChargeService chargeService,
+                           DelinquencyRepository delinRepo) { 
         this.disbRepo = disbRepo;
         this.loanRepo = loanRepo;
         this.appRepo = appRepo;
@@ -55,8 +59,9 @@ public class DisbursementService {
         this.emiScheduleService = emiScheduleService;
         this.auditLogService = auditLogService;
         this.notificationService = notificationService;
-        this.feeService          = feeService;
-        this.chargeService       = chargeService;
+        this.feeService = feeService;
+        this.chargeService = chargeService;
+        this.delinRepo = delinRepo; 
     }
 
     /**
@@ -116,6 +121,14 @@ public class DisbursementService {
                 .status(LoanAccountStatus.ACTIVE)
                 .build());
 
+        delinRepo.save(Delinquency.builder()
+                .loanAccount(loan)
+                .dpd(0)
+                .bucket(BucketType.CURRENT)
+                .asOfDate(LocalDate.now())
+                .updatedDate(LocalDateTime.now())
+                .build());
+
         // Generate EMI schedule based on gross sanctioned amount
         emiScheduleService.generateIfNotExists(loan.getLoanAccountId());
 
@@ -132,7 +145,7 @@ public class DisbursementService {
                 app.getCreatedBy().getFullName(),
                 loan.getLoanAccountId(),
                 netAmount.toPlainString());
-        }
+       }
 
         auditLogService.log(me, AuditAction.DISBURSED, "APPLICATION", applicationId, "Net disbursed: " + netAmount + " / Sanctioned: " + sanctionedAmount);
         auditLogService.log(me, AuditAction.EMI_SCHEDULE_GENERATED, "LOAN_ACCOUNT", loan.getLoanAccountId(), "EMI schedule generated");
@@ -153,6 +166,7 @@ public class DisbursementService {
                 .loanAccount(toLoanDto(loan))
                 .build();
     }
+ 
 
     public LoanAccountResponse getLoanAccount(Long loanAccountId) {
         LoanAccount loan = loanRepo.findById(loanAccountId)
