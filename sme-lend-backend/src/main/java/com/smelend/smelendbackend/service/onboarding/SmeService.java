@@ -55,7 +55,6 @@ public class SmeService {
         Sme sme = smeRepo.findById(smeId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SME not found"));
 
-        // Ownership check: only creator or ADMIN can edit
         boolean owner = sme.getCreatedBy() != null && sme.getCreatedBy().getUserId().equals(me.getUserId());
         if (!owner && !currentUserService.isAdmin(me)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "You are not allowed to edit this SME");
@@ -94,7 +93,6 @@ public class SmeService {
         return toDto(sme);
     }
 
-    /** Agent/Admin returns all SMEs; Applicant returns only their own */
     public List<SmeResponse> listMine() {
         AppUser me = currentUserService.getCurrentUser();
         String role = me.getRole().getRoleName().name();

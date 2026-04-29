@@ -34,7 +34,6 @@ public class CurrentUserService {
                 && user.getRole().getRoleName().name().equals("ADMIN");
     }
 
-    /** True if the currently-authenticated user holds the given role. */
     public boolean hasRole(String roleName) {
         AppUser user = getCurrentUser();
         return user.getRole() != null
@@ -42,7 +41,6 @@ public class CurrentUserService {
                 && user.getRole().getRoleName().name().equals(roleName);
     }
 
-    /** True if the currently-authenticated user holds any of the given roles. */
     public boolean hasAnyRole(String... roleNames) {
         AppUser user = getCurrentUser();
         if (user.getRole() == null || user.getRole().getRoleName() == null) return false;

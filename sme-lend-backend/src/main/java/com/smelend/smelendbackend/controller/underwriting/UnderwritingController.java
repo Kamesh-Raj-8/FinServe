@@ -23,10 +23,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Underwriting module controller.
- * Combines UW queue/decisions AND scoring reads (scoring supports UW work).
- */
 @RestController
 @RequestMapping("/uw")
 public class UnderwritingController {
@@ -55,7 +51,6 @@ public class UnderwritingController {
         this.documentService     = documentService;
     }
 
-    // ── UW DECISION (UNDERWRITER only) ────────────────────────────────
 
     @PostMapping("/applications/{applicationId}/decision")
     @PreAuthorize("hasAnyRole('UNDERWRITER')")
@@ -65,8 +60,6 @@ public class UnderwritingController {
         return ApiResponse.ok("Decision recorded",
                 underwritingService.decide(applicationId, req));
     }
-
-    // ── SCORING — reads served from UW module (UNDERWRITER + ADMIN) ───
 
     @GetMapping("/applications/{applicationId}/scorecard")
     @PreAuthorize("hasAnyRole('UNDERWRITER','ADMIN','OPERATIONS','AGENT')")
@@ -88,8 +81,6 @@ public class UnderwritingController {
         return ApiResponse.ok("Rescoring completed",
                 decisionEngine.scoreAndDecide(applicationId));
     }
-
-    // ── UW QUEUE & CROSS-REFERENCE READS ─────────────────────────────
 
     @GetMapping("/queue")
     @PreAuthorize("hasAnyRole('UNDERWRITER','ADMIN')")

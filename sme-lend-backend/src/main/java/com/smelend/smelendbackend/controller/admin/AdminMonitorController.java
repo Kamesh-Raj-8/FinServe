@@ -23,11 +23,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Admin Monitor Controller — Read-Only (GET) access to all role data.
- * Admin can view everything for monitoring purposes but cannot perform
- * role-specific actions (Approve, Submit, Disburse, etc.).
- */
 @RestController
 @RequestMapping("/admin/monitor")
 @PreAuthorize("hasRole('ADMIN')")
@@ -60,7 +55,6 @@ public class AdminMonitorController {
         this.auditLogService = auditLogService;
     }
 
-    // ── Onboarding ────────────────────────────────────────────────────
 
     @GetMapping("/smes")
     public ApiResponse<List<SmeResponse>> allSmes() {
@@ -82,7 +76,6 @@ public class AdminMonitorController {
         return ApiResponse.ok("Promoter fetched", promoterService.get(promoterId));
     }
 
-    // ── KYC ──────────────────────────────────────────────────────────
 
     @GetMapping("/kyc")
     public ApiResponse<List<KycResponse>> allKyc() {
@@ -99,7 +92,6 @@ public class AdminMonitorController {
         return ApiResponse.ok("KYC fetched", kycService.listBySme(smeId));
     }
 
-    // ── Applications ─────────────────────────────────────────────────
 
     @GetMapping("/applications")
     public ApiResponse<List<ApplicationResponse>> allApplications() {
@@ -111,14 +103,12 @@ public class AdminMonitorController {
         return ApiResponse.ok("Application fetched", applicationService.get(appId));
     }
 
-    // ── Offers ───────────────────────────────────────────────────────
 
     @GetMapping("/offers")
     public ApiResponse<List<OfferResponse>> allOffers() {
         return ApiResponse.ok("Offers fetched", offerService.listMineOrAll());
     }
 
-    // ── Collections ──────────────────────────────────────────────────
 
     @GetMapping("/delinquencies")
     public ApiResponse<List<DelinquencyResponse>> allDelinquencies() {
@@ -130,14 +120,12 @@ public class AdminMonitorController {
         return ApiResponse.ok("PTPs fetched", collectionsService.listPtps(loanAccountId));
     }
 
-    // ── Risk ─────────────────────────────────────────────────────────
 
     @GetMapping("/risk/metrics")
     public ApiResponse<PortfolioMetricsResponse> riskMetrics() {
         return ApiResponse.ok("Portfolio metrics fetched", riskService.portfolioMetrics());
     }
 
-    // ── Compliance ───────────────────────────────────────────────────
 
     @GetMapping("/audit-logs")
     public ApiResponse<List<AuditLogResponse>> auditLogs() {

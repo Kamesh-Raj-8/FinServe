@@ -16,7 +16,6 @@ public interface OfferRepository extends JpaRepository<Offer, Long> {
 
     List<Offer> findByOfferStatus(OfferStatus status);
 
-    /** Fetch all offers for applications that are currently in OFFER_ACCEPTED status */
     @Query("SELECT o FROM Offer o WHERE o.application.status = 'OFFER_ACCEPTED' ORDER BY o.application.applicationId DESC")
     List<Offer> findAllForAcceptedApplications();
 }

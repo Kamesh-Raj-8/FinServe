@@ -52,27 +52,14 @@ public class CollectionsService {
         return toDelDto(del);
     }
 
-    /**
-     * Returns all delinquency records in the system.
-     *
-     * Two-pass approach:
-     *   Pass 1 — identify any loan with a currently overdue unpaid schedule and
-     *             refresh (or create) its delinquency record via DpdService.
-     *             This catches new overdue loans that the nightly scheduler hasn't
-     *             processed yet.
-     *   Pass 2 — return ALL rows from the delinquency table, so records already
-     *             populated by the scheduler are always included in the response.
-     */
     @Transactional
     public List<DelinquencyResponse> listAllDelinquencies() {
         LocalDate today = LocalDate.now();
-        
-        // Refresh DPD for every loan account
+
         loanRepo.findAll().forEach(loan -> {
             Delinquency del = dpdService.computeAndUpsert(loan.getLoanAccountId());
         });
-        
-        // Return everything in the delinquency table
+
         return delinRepo.findAll()
                 .stream()
                 .map(this::toDelDto)

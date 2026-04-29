@@ -21,7 +21,6 @@ public class SmeController {
         this.smeService = smeService;
     }
 
-    // ── WRITE: APPLICANT / AGENT only ─────────────────────────────────
 
     @PostMapping
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT')")
@@ -36,7 +35,6 @@ public class SmeController {
         return ApiResponse.ok("SME updated", smeService.update(smeId, req));
     }
 
-    // ── READ: Admin/UW can monitor, Applicant/Agent see own ───────────
 
     @GetMapping("/{smeId}")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT','ADMIN','UNDERWRITER')")

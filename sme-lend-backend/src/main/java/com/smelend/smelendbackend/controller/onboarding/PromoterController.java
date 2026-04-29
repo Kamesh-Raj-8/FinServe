@@ -30,7 +30,6 @@ public class PromoterController {
         this.documentService = documentService;
     }
 
-    // ── WRITE: APPLICANT / AGENT only ─────────────────────────────────
 
     @PostMapping("/smes/{smeId}/promoters")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT')")
@@ -40,7 +39,6 @@ public class PromoterController {
         return ApiResponse.ok("Promoter added", promoterService.addPromoter(smeId, req));
     }
 
-    // ── READ: Admin/UW can monitor ────────────────────────────────────
 
     @GetMapping("/smes/{smeId}/promoters")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT','ADMIN','UNDERWRITER')")
@@ -54,9 +52,6 @@ public class PromoterController {
         return ApiResponse.ok("Promoter fetched", promoterService.get(promoterId));
     }
 
-    // ── KYC DOCUMENTS — linked to Promoter (one per DocType) ─────────
-
-    /** Upload or replace a KYC document for a promoter */
     @PostMapping("/promoters/{promoterId}/documents/{docType}/upload")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT','ADMIN')")
     public ApiResponse<PromoterDocumentResponse> uploadKycDoc(
@@ -67,7 +62,6 @@ public class PromoterController {
                 documentService.uploadPromoterDoc(promoterId, file, docType));
     }
 
-    /** List all KYC documents for a promoter */
     @GetMapping("/promoters/{promoterId}/documents")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT','ADMIN','UNDERWRITER')")
     public ApiResponse<java.util.List<PromoterDocumentResponse>> listKycDocs(
@@ -76,7 +70,6 @@ public class PromoterController {
                 documentService.listPromoterDocs(promoterId));
     }
 
-    /** Download a specific KYC document */
     @GetMapping("/promoters/{promoterId}/documents/{docType}/download")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT','ADMIN','UNDERWRITER')")
     public ResponseEntity<byte[]> downloadKycDoc(@PathVariable Long promoterId,

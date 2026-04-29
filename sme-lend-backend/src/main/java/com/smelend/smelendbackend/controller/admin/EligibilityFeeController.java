@@ -23,7 +23,6 @@ public class EligibilityFeeController {
         this.feeService         = feeService;
     }
 
-    // ── Eligibility Policies ─────────────────────────────────────────
     @GetMapping("/eligibility-policies")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<EligibilityPolicyResponse>> listPolicies() {
@@ -49,14 +48,12 @@ public class EligibilityFeeController {
         return ApiResponse.ok("Policy deactivated", null);
     }
 
-    /** Check eligibility for a submitted application */
     @GetMapping("/eligibility-check/{applicationId}")
     @PreAuthorize("hasAnyRole('ADMIN','UNDERWRITER','OPERATIONS')")
     public ApiResponse<EligibilityCheckResult> checkEligibility(@PathVariable Long applicationId) {
         return ApiResponse.ok("Eligibility checked", eligibilityService.checkApplication(applicationId));
     }
 
-    // ── Fee Configs ──────────────────────────────────────────────────
     @GetMapping("/fee-configs")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<FeeConfigResponse>> listFees() {

@@ -41,7 +41,6 @@ public class DpdService {
         List<RepaymentSchedule> schedules =
                 scheduleRepo.findByLoanAccount_LoanAccountIdOrderByInstallmentNoAsc(loanAccountId);
 
-        // DPD = max days late among unpaid installments
         int dpd = 0;
         for (RepaymentSchedule s : schedules) {
             if (s.getStatus() != InstallmentStatus.PAID && s.getDueDate() != null && s.getDueDate().isBefore(today)) {

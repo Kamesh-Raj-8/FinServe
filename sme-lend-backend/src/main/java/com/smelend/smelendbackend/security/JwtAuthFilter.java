@@ -1,6 +1,6 @@
 package com.smelend.smelendbackend.security;
 
-//import io.jsonwebtoken.Claims;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

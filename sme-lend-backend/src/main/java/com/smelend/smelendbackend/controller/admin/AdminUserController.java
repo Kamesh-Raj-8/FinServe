@@ -11,10 +11,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Admin User Management — ADMIN role only.
- * ADMIN cannot create ADMIN or APPLICANT users via this endpoint.
- */
 @RestController
 @RequestMapping("/admin/users")
 @PreAuthorize("hasRole('ADMIN')")

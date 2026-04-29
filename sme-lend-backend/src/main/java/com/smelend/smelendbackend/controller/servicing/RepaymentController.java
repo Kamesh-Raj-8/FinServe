@@ -20,7 +20,6 @@ public class RepaymentController {
         this.repaymentService = repaymentService;
     }
 
-    // ── WRITE: SERVICING/ADMIN only — granular check enforced in RepaymentService ──
 
     @PostMapping
     @PreAuthorize("hasAnyRole('SERVICING','ADMIN')")
@@ -28,7 +27,6 @@ public class RepaymentController {
         return ApiResponse.ok("Repayment posted", repaymentService.post(req));
     }
 
-    // ── READ: Servicing, Applicant, Agent, Admin (monitoring) ─────────
 
     @GetMapping("/loan-accounts/{loanAccountId}")
     @PreAuthorize("hasAnyRole('SERVICING','APPLICANT','AGENT','ADMIN')")

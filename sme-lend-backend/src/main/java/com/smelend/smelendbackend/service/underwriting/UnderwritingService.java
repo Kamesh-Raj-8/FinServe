@@ -52,8 +52,6 @@ public class UnderwritingService {
     }
 
     public List<ApplicationResponse> queue() {
-        // Weighted queue: oldest submissions (longest wait) appear first → SLA compliance
-        // Only UW/ADMIN should call (controller restricts)
         return appRepo.findByStatus(ApplicationStatus.ROUTED_TO_UW).stream()
                 .map(this::toAppDto)
                 .toList();
@@ -71,9 +69,6 @@ public class UnderwritingService {
         }
 
         UwDecision decision = req.getDecision();
-
-        // ── Hard score constraint — dynamically derived from the loan product ──
-        // Approval is blocked when the scorecard band is POOR (score < product.creditThreshold).
         if (decision == UwDecision.APPROVE) {
             int productThreshold = resolveThreshold(app);
             scorecardRepo.findByApplication_ApplicationId(applicationId).ifPresent(sc -> {
@@ -87,21 +82,17 @@ public class UnderwritingService {
             });
         }
 
-        // update application status based on UW decision
         ApplicationStatus newStatus;
         if (decision == UwDecision.APPROVE) {
             newStatus = ApplicationStatus.UW_APPROVED;
         } else if (decision == UwDecision.REJECT) {
             newStatus = ApplicationStatus.UW_REJECTED;
         } else {
-            // RETURN: send back to KYC_PENDING (or DRAFT) for fixes
             newStatus = ApplicationStatus.KYC_PENDING;
         }
 
         app.setStatus(newStatus);
         appRepo.save(app);
-
-        // Notify applicant based on UW decision
         if (app.getCreatedBy() != null) {
             String _email = app.getCreatedBy().getEmail();
             String _name  = app.getCreatedBy().getFullName();
@@ -114,8 +105,6 @@ public class UnderwritingService {
                 }
             }
         }
-
-        // One review per application (you have unique constraint in entity)
         UwReview review = uwRepo.findByApplication_ApplicationId(applicationId).orElse(null);
 
         if (review == null) {

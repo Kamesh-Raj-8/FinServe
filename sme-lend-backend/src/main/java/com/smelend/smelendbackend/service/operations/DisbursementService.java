@@ -64,10 +64,6 @@ public class DisbursementService {
         this.delinRepo = delinRepo; 
     }
 
-    /**
-     * OPS disburses only if application is OFFER_ACCEPTED.
-     * Creates Disbursement + LoanAccount + EMI schedule.
-     */
     public DisbursementResponse disburse(Long applicationId, DisburseRequest req) {
         AppUser me = currentUserService.getCurrentUser();
         requireOpsOrAdmin(me);
@@ -82,7 +78,6 @@ public class DisbursementService {
         Offer offer = offerRepo.findByApplication_ApplicationId(applicationId)
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Offer not found for application"));
 
-        // prevent duplicates
         disbRepo.findByApplication_ApplicationId(applicationId).ifPresent(x -> {
             throw new ApiException(HttpStatus.CONFLICT, "Disbursement already exists for this application");
         });
@@ -94,12 +89,8 @@ public class DisbursementService {
         // ── Auto-calculate: sanctioned amount always comes from offer ──────
         BigDecimal sanctionedAmount = offer.getSanctionedAmount();
         LocalDate startDate = req.getDisbursementDate();
-
-        // Calculate applicable upfront fees (PROCESSING, LEGAL, INSURANCE, TECH)
         java.util.List<AppliedFeeDto> appliedFees = feeService.calculateFees(
                 app.getProduct().getProductId(), sanctionedAmount);
-
-        // Net amount = sanctioned - upfront fees (PENAL excluded from upfront)
         BigDecimal netAmount = DisbursementCalculator.netDisbursedAmount(sanctionedAmount, appliedFees);
 
         Disbursement disb = disbRepo.save(Disbursement.builder()
@@ -129,10 +120,7 @@ public class DisbursementService {
                 .updatedDate(LocalDateTime.now())
                 .build());
 
-        // Generate EMI schedule based on gross sanctioned amount
         emiScheduleService.generateIfNotExists(loan.getLoanAccountId());
-
-        // Post processing fee charges as individual Charge records
         for (AppliedFeeDto fee : appliedFees) {
             if (!com.smelend.smelendbackend.entity.enums.FeeType.PENAL.name().equals(fee.getFeeType())
                     && fee.getCalculatedAmount().compareTo(java.math.BigDecimal.ZERO) > 0) {
@@ -150,15 +138,14 @@ public class DisbursementService {
         auditLogService.log(me, AuditAction.DISBURSED, "APPLICATION", applicationId, "Net disbursed: " + netAmount + " / Sanctioned: " + sanctionedAmount);
         auditLogService.log(me, AuditAction.EMI_SCHEDULE_GENERATED, "LOAN_ACCOUNT", loan.getLoanAccountId(), "EMI schedule generated");
 
-        // update application status to DISBURSED
         app.setStatus(ApplicationStatus.DISBURSED);
         appRepo.save(app);
 
         return DisbursementResponse.builder()
                 .disbursementId(disb.getDisbursementId())
                 .applicationId(applicationId)
-                .amount(netAmount)         // net disbursed
-                .sanctionedAmount(sanctionedAmount)  // gross sanctioned
+                .amount(netAmount)
+                .sanctionedAmount(sanctionedAmount)
                 .mode(disb.getMode())
                 .transactionRef(disb.getTransactionRef())
                 .disbursementDate(disb.getDisbursementDate())
@@ -181,10 +168,6 @@ public class DisbursementService {
         }
     }
 
-    /**
-     * Returns all applications in OFFER_ACCEPTED status with their offer details.
-     * Used by Operations to see exactly what is ready to disburse.
-     */
     public java.util.List<PendingDisbursementDto> listPendingDisbursements() {
         return offerRepo.findAllForAcceptedApplications().stream()
                 .map(offer -> {
@@ -224,10 +207,6 @@ public class DisbursementService {
                 .build();
     }
 
-    /**
-     * Loan account number = LA-{productId:04d}-{bankAccountNo}.
-     * Deterministic: same applicant + product always yields the same format.
-     */
     private String generateAccountNumber(com.smelend.smelendbackend.entity.LoanApplication app,
                                           Long productId) {
         String bankAccNo = (app.getCreatedBy() != null

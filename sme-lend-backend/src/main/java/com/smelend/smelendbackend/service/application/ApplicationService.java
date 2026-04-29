@@ -67,7 +67,6 @@ public class ApplicationService {
         Sme sme = smeRepo.findById(req.getSmeId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SME not found"));
 
-        // only SME owner (or ADMIN) can create application for SME
         boolean owner = sme.getCreatedBy() != null && sme.getCreatedBy().getUserId().equals(me.getUserId());
         if (!owner && !currentUserService.isAdmin(me)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "You cannot create application for this SME");
@@ -97,14 +96,12 @@ public class ApplicationService {
     public List<ApplicationResponse> listMine() {
         AppUser me = currentUserService.getCurrentUser();
         String role = me.getRole().getRoleName().name();
-        // Agents and admins see all; applicants see only their own
         if (role.equals("AGENT") || role.equals("ADMIN")) {
             return appRepo.findAll().stream().map(this::toDto).toList();
         }
         return appRepo.findByCreatedBy_UserId(me.getUserId()).stream().map(this::toDto).toList();
     }
 
-    /** Returns ALL applications — for Agent/Admin/UW cross-reference */
     public List<ApplicationResponse> listAll() {
         return appRepo.findAll().stream().map(this::toDto).toList();
     }
@@ -127,10 +124,6 @@ public class ApplicationService {
         return toDto(app);
     }
 
-    /**
-     * Submit flow for Phase-1:
-     * DRAFT (or READY_TO_SUBMIT later after KYC) -> SUBMITTED -> ROUTED_TO_UW
-     */
     public ApplicationResponse submit(Long applicationId) {
         AppUser me = currentUserService.getCurrentUser();
 
@@ -148,9 +141,6 @@ public class ApplicationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Application cannot be submitted from status: " + app.getStatus());
         }
 
-        // ── Comprehensive KYC Readiness Gate ──────────────────────────
-        // Checks: (1) KYC record verified, (2) Applicant linked,
-        //         (3) ALL promoters individually verified.
         KycVerificationService.KycReadinessResult kycResult =
                 kycVerificationService.checkAll(app);
 
@@ -160,26 +150,17 @@ public class ApplicationService {
                     "Cannot submit: KYC verification incomplete. " + failureDetail);
         }
 
-        // Phase-1 routing with auto-decisioning
         app.setStatus(ApplicationStatus.SUBMITTED);
         app.setSubmittedAt(java.time.LocalDateTime.now());
         app = appRepo.save(app);
 
-        // Run scoring + auto-decision engine.
-        // Possible outcomes written to the DB by the engine:
-        //   AUTO_APPROVED  → score ≥ 750 + eligibility pass  → trigger auto-offer below
-        //   AUTO_DECLINED  → eligibility failure              → status left as SUBMITTED (edge case handled below)
-        //   ROUTE_TO_UW    → score < 750                      → route to human UW queue
         decisionEngine.scoreAndDecide(app.getApplicationId());
         app = appRepo.findById(app.getApplicationId()).orElse(app);
 
         if (app.getStatus() == ApplicationStatus.AUTO_APPROVED) {
-            // ── Excellent/High CIBIL path: no manual steps allowed ───────────
-            // Auto-generate offer from product standard terms, then advance to OFFERED.
             offerService.createAutoOffer(app);
             app = appRepo.findById(app.getApplicationId()).orElse(app);
         } else if (app.getStatus() == ApplicationStatus.SUBMITTED) {
-            // Engine did not change status (e.g. AUTO_DECLINE edge case or no scorecard) → route to UW
             app.setStatus(ApplicationStatus.ROUTED_TO_UW);
             app = appRepo.save(app);
             if (app.getCreatedBy() != null) {
@@ -189,7 +170,6 @@ public class ApplicationService {
                         app.getApplicationId());
             }
         } else if (app.getStatus() != ApplicationStatus.OFFERED) {
-            // Medium/Low score → human UW queue (engine already set ROUTED_TO_UW or SUBMITTED)
             if (app.getStatus() == ApplicationStatus.SUBMITTED
                     || app.getStatus() == ApplicationStatus.ROUTED_TO_UW) {
                 if (app.getStatus() == ApplicationStatus.SUBMITTED) {

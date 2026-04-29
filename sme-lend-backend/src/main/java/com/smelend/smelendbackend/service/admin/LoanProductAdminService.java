@@ -85,10 +85,6 @@ public class LoanProductAdminService {
         return loanProductMapper.toResponse(productRepo.save(product));
     }
 
-    /**
-     * Soft-delete: mark as INACTIVE instead of hard-deleting.
-     * Prevents FK constraint violations when products have linked applications.
-     */
     public void delete(Long productId) {
         LoanProduct product = productRepo.findById(productId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Loan product not found"));

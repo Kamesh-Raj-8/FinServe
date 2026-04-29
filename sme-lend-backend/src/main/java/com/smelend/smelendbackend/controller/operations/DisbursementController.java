@@ -27,7 +27,7 @@ public class DisbursementController {
         this.applicationService  = applicationService;
     }
 
-    // ── WRITE: OPERATIONS only ────────────────────────────────────────
+
 
     @PostMapping("/applications/{applicationId}/disburse")
     @PreAuthorize("hasAnyRole('OPERATIONS')")
@@ -38,7 +38,6 @@ public class DisbursementController {
                 disbursementService.disburse(applicationId, req));
     }
 
-    // ── READ: OPERATIONS + ADMIN monitor ─────────────────────────────
 
     @GetMapping("/pending-disbursements")
     @PreAuthorize("hasAnyRole('OPERATIONS','ADMIN')")
@@ -53,8 +52,6 @@ public class DisbursementController {
         return ApiResponse.ok("Loan account fetched",
                 disbursementService.getLoanAccount(loanAccountId));
     }
-
-    // ── OPERATIONS APPLICATION VIEWS (merged from OperationsApplicationController) ──
 
     @GetMapping("/applications/approved")
     @PreAuthorize("hasAnyRole('OPERATIONS','ADMIN')")

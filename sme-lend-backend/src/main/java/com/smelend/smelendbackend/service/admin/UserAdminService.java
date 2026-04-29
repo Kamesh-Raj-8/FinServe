@@ -16,10 +16,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Admin-only service for user management.
- * Enforces: ADMIN cannot create ADMIN or APPLICANT users.
- */
+
 @Service
 public class UserAdminService {
 
@@ -36,7 +33,6 @@ public class UserAdminService {
     }
 
     public UserResponse createUser(CreateUserRequest req) {
-        // Business rule: ADMIN cannot create ADMIN or APPLICANT via this endpoint
         if (req.getRole() == RoleName.ADMIN || req.getRole() == RoleName.APPLICANT) {
             throw new ApiException(HttpStatus.BAD_REQUEST,
                     "Cannot create users with ADMIN or APPLICANT role from this endpoint");
@@ -74,7 +70,6 @@ public class UserAdminService {
         AppUser user = userRepo.findById(userId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found: " + userId));
 
-        // Business rule: Admin accounts can never be deactivated
         if (user.getRole() != null
                 && user.getRole().getRoleName() == RoleName.ADMIN
                 && status == StatusFlag.INACTIVE) {

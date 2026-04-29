@@ -17,30 +17,6 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Scoring + Auto-Decisioning Engine — Single Source of Truth for all CIBIL/score assessment.
- *
- * Pipeline (runs once when an application is submitted via scoreAndDecide):
- *
- *   Step 1 — Weighted scoreValue (300–900, deterministic):
- *             40 % leverage  — requestedAmount / product.maxAmount
- *             30 % tenor     — tenorMonths / product.maxTenorMonths
- *             30 % income    — annualisedIncome / minIncomeAmount  (capped at 1.0)
- *             Higher income + lower leverage/tenor = higher score.
- *
- *   Step 2 — Dynamic 3-tier band from product.creditThreshold (T):
- *             POOR      : score < T                   → approve blocked
- *             FAIR      : T <= score < 750        → manual underwriter review
- *             EXCELLENT : score >= 750           → auto-approve eligible
- *
- *   Step 3 — Eligibility rules (product amount cap, tenor range, custom policies)
- *
- *   Step 4 — Routing:
- *             EXCELLENT band + eligibility passes → AUTO_APPROVE
- *             Any eligibility failure             → AUTO_DECLINE
- *             FAIR or POOR band                  → ROUTE_TO_UW
- *                 (UnderwritingService independently hard-blocks approval when band = POOR)
- */
 @Service
 public class DecisionEngine {
 
@@ -62,14 +38,11 @@ public class DecisionEngine {
         this.promoterRepo       = promoterRepo;
     }
 
-    // ── Public API ────────────────────────────────────────────────────
-
     @Transactional
     public DecisionResponse scoreAndDecide(Long applicationId) {
         LoanApplication app = appRepo.findById(applicationId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Application not found"));
 
-        // Idempotent: return cached decision without re-running the engine
         return decisionRepo.findByApplication_ApplicationId(applicationId)
                 .map(this::toDecisionDto)
                 .orElseGet(() -> runEngine(app));
@@ -91,18 +64,10 @@ public class DecisionEngine {
                         "Decision not found for application #" + applicationId));
     }
 
-    // ── Engine ────────────────────────────────────────────────────────
-
     private DecisionResponse runEngine(LoanApplication app) {
-
-        // Step 1 + 2: Weighted score + 3-tier band
         Scorecard sc = buildScorecard(app);
         scorecardRepo.save(sc);
-
-        // Step 3: Eligibility
         var eligibility = eligibilityService.checkApplication(app.getApplicationId());
-
-        // Step 4: Route
         DecisionPath      path;
         ApplicationStatus newStatus;
         String            reason;
@@ -140,13 +105,9 @@ public class DecisionEngine {
         return toDecisionDto(decisionRepo.save(decision));
     }
 
-    // ── Scorecard builder ─────────────────────────────────────────────
-
     private Scorecard buildScorecard(LoanApplication app) {
         LoanProduct prod     = app.getProduct();
         int         threshold = resolveThreshold(prod);
-
-        // ── Weighted score (300–900) ─────────────────────────────────
         Promoter   primary         = findPrimaryPromoter(app);
         BigDecimal annualisedIncome = annualise(primary);
         BigDecimal minIncome        = prod.getMinIncomeAmount();
@@ -156,12 +117,9 @@ public class DecisionEngine {
         double incomeRatio = (minIncome != null && minIncome.compareTo(BigDecimal.ZERO) > 0)
                 ? Math.min(1.0, annualisedIncome.doubleValue() / minIncome.doubleValue())
                 : 0.0;
-
-        // 900 base — leverage/tenor risk penalty + income benefit — neutral offset
         double raw   = 900 - (leverage * 240) - (tenorRatio * 180) + (incomeRatio * 180) - 180;
         int    score = Math.max(300, Math.min(900, (int) Math.round(raw)));
 
-        // ── Dynamic 3-tier band from product creditThreshold ─────────
         ScoreBand band;
         if (score < threshold) {
             band = ScoreBand.POOR;
@@ -196,12 +154,6 @@ public class DecisionEngine {
                 .build();
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────
-
-    /**
-     * Resolves the threshold score from the product's creditThreshold.
-     * Falls back to 700 when not configured.
-     */
     int resolveThreshold(LoanProduct product) {
         BigDecimal t = product.getCreditThreshold();
         return (t != null && t.compareTo(BigDecimal.ZERO) > 0) ? t.intValue() : 700;
@@ -234,12 +186,9 @@ public class DecisionEngine {
             return "Score " + sc.getScoreValue() + " is below the product threshold (" + threshold
                    + ") — routed to underwriter. Note: UW approval is blocked for POOR-band applications.";
         }
-        // FAIR band
         return "Score " + sc.getScoreValue() + " is within the manual review range ["
                + threshold + "–" + (749) + "] (FAIR) — routed to underwriter for manual review.";
     }
-
-    // ── Mappers ───────────────────────────────────────────────────────
 
     private ScorecardResponse toScoreDto(Scorecard s) {
         int threshold = resolveThreshold(s.getApplication().getProduct());

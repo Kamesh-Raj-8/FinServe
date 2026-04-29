@@ -18,17 +18,6 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * KYC Service — Automatic Relational KYC Initialization.
- *
- * Business rules enforced:
- *  1. One KYC per LoanApplication (unique constraint).
- *  2. All promoters of the SME are automatically linked.
- *  3. At least one promoter is mandatory — throws if none exist.
- *  4. Main promoter = highest ownership %. If applicant creates KYC
- *     and is also a promoter (self-employment), they are main.
- *  5. Creator rule: only createdBy user may edit KYC docs.
- */
 @Service
 public class KycService {
 
@@ -59,33 +48,12 @@ public class KycService {
         this.notificationService = notificationService;
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  INITIALIZE — Automatic KYC snapshot from LoanApplication
-    // ════════════════════════════════════════════════════════════
-
-    /**
-     * POST /kyc/initialize
-     *
-     * Aggregates all participants from the LoanApplication and creates
-     * a fully-linked KYC snapshot automatically.
-     *
-     * Rules:
-     *  - Idempotent: returns existing KYC if already initialized.
-     *  - Fetches all promoters of the SME and links them.
-     *  - Main promoter = highest ownershipPct. Tie-break: first by ID.
-     *  - If promoter list is empty: throws with clear error.
-     *  - If applicant creator also matches a promoter → flag them as main.
-     */
     @Transactional
     public KycResponse initializeKYC(InitKycRequest req) {
         AppUser me = currentUserService.getCurrentUser();
-
-        // Load the application
         LoanApplication app = appRepo.findById(req.getLoanApplicationId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                         "Loan application #" + req.getLoanApplicationId() + " not found"));
-
-        // Idempotent: return existing KYC if already created for this app
         return kycRepo.findByLoanApplication_ApplicationId(app.getApplicationId())
                 .map(existing -> toDto(existing, me))
                 .orElseGet(() -> createKycSnapshot(app, me, req.getNotes()));
@@ -93,37 +61,21 @@ public class KycService {
 
     private KycResponse createKycSnapshot(LoanApplication app, AppUser me, String notes) {
         Sme sme = app.getSme();
-
-        // Fetch all promoters of this SME
         List<Promoter> promoters = promoterRepo.findBySme_SmeId(sme.getSmeId());
-
-        // ── Business rule: at least one promoter is mandatory ─────
         if (promoters.isEmpty()) {
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "Cannot initialize KYC: the SME '" + sme.getLegalName() +
                     "' has no registered promoters. Add at least one promoter before creating KYC.");
         }
-
-        // ── Deduplication / pre-verified status check ─────────────
-        // If a promoter already carries VERIFIED status (from a prior application's
-        // KYC cycle), we recognise that existing verification rather than creating a
-        // redundant PENDING record.  When ALL promoters are already VERIFIED the
-        // KYC record itself is initialised as VERIFIED — no agent action required.
         long preVerifiedCount = promoters.stream()
                 .filter(p -> p.getKycStatus() == KycStatus.VERIFIED)
                 .count();
         boolean allPreVerified = (preVerifiedCount == promoters.size());
-
         KycStatus initialStatus = allPreVerified ? KycStatus.VERIFIED : KycStatus.PENDING;
-
-        // ── Determine main promoter ───────────────────────────────
-        // Default: highest ownership percentage (tie-break: lowest ID)
         Promoter mainPromoter = promoters.stream()
                 .max(Comparator.comparing(Promoter::getOwnershipPct)
                         .thenComparing(Comparator.comparing(Promoter::getPromoterId).reversed()))
-                .orElseThrow(); // safe — promoters non-empty
-
-        // ── Build KYC record ──────────────────────────────────────
+                .orElseThrow();
         String compositeNotes = allPreVerified
                 ? "All promoters carry prior VERIFIED status — KYC auto-initialised as VERIFIED."
                   + (notes != null ? " | " + notes : "")
@@ -144,8 +96,6 @@ public class KycService {
                 .build();
 
         KycRecord saved = kycRepo.save(kyc);
-
-        // ── Build promoter links ──────────────────────────────────
         List<KycPromoterLink> links = promoters.stream()
                 .map(p -> KycPromoterLink.builder()
                         .kycRecord(saved)
@@ -157,8 +107,6 @@ public class KycService {
 
         linkRepo.saveAll(links);
         saved.setPromoterLinks(links);
-
-        // ── Notifications & audit ─────────────────────────────────
         AppUser applicant = app.getCreatedBy();
         if (applicant != null) {
             notificationService.notifyKycCreated(
@@ -170,10 +118,6 @@ public class KycService {
 
         return toDto(saved, me);
     }
-
-    // ════════════════════════════════════════════════════════════
-    //  VERIFY / REJECT
-    // ════════════════════════════════════════════════════════════
 
     @Transactional
     public KycResponse verify(Long kycId, KycActionRequest req) {
@@ -187,9 +131,6 @@ public class KycService {
         if (req != null && req.getNotes() != null) record.setNotes(req.getNotes());
 
         KycRecord saved = kycRepo.save(record);
-
-        // ── Cascade: mark ALL linked promoters as individually VERIFIED ──
-        // This ensures the promoter-level check in KycVerificationService passes.
         if (saved.getPromoterLinks() != null) {
             for (KycPromoterLink link : saved.getPromoterLinks()) {
                 Promoter promoter = link.getPromoter();
@@ -226,10 +167,6 @@ public class KycService {
         auditLogService.log(me, AuditAction.KYC_REJECTED, "KYC", saved.getKycId(), "KYC rejected");
         return toDto(saved, me);
     }
-
-    // ════════════════════════════════════════════════════════════
-    //  QUERIES
-    // ════════════════════════════════════════════════════════════
 
     public List<KycResponse> listAll() {
         AppUser me = currentUserService.getCurrentUser();
@@ -271,10 +208,6 @@ public class KycService {
                 .toList();
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  HELPERS
-    // ════════════════════════════════════════════════════════════
-
     private KycRecord findKycOrThrow(Long kycId) {
         return kycRepo.findById(kycId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "KYC record not found"));
@@ -287,10 +220,6 @@ public class KycService {
         }
     }
 
-    /**
-     * canEdit = current user is the creator of the KYC record (creator rule).
-     * Admin can always edit.
-     */
     private boolean resolveCanEdit(KycRecord kyc, AppUser me) {
         if (me == null) return false;
         String role = me.getRole().getRoleName().name();
@@ -300,7 +229,6 @@ public class KycService {
     }
 
     private KycResponse toDto(KycRecord k, AppUser me) {
-        // Map promoter links → DTOs (main promoter first)
         List<KycPromoterDto> promoterDtos = k.getPromoterLinks() == null
                 ? List.of()
                 : k.getPromoterLinks().stream()

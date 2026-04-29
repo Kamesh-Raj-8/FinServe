@@ -9,11 +9,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Notification endpoints — placed in the application module because
- * they serve every authenticated role (applicant, agent, UW, ops, etc.).
- * No new folder created; this lives alongside ApplicationController.
- */
 @RestController
 @RequestMapping("/notifications")
 @PreAuthorize("isAuthenticated()")

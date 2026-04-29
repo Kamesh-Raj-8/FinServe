@@ -11,6 +11,5 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     List<Document> findByApplication_ApplicationId(Long applicationId);
 
-    /** Returns the existing record for this (application, docType) pair — used for upsert */
     Optional<Document> findByApplication_ApplicationIdAndDocType(Long applicationId, DocType docType);
 }

@@ -53,7 +53,6 @@ public class RepaymentService {
 
     @Transactional
     public RepaymentResponse post(PostRepaymentRequest req) {
-        // ── Service-level role gate: SERVICING or ADMIN only ─────────────────
         if (!currentUserService.hasAnyRole("SERVICING", "ADMIN")) {
             throw new ApiException(HttpStatus.FORBIDDEN,
                     "Only SERVICING/ADMIN can post repayments");
@@ -67,7 +66,6 @@ public class RepaymentService {
                     "Repayments can only be posted to ACTIVE loan accounts. Status: " + loan.getStatus());
         }
 
-        // ── Resolve amount: from scheduleId (auto) or explicit field ─────────
         BigDecimal amount;
         Long targetScheduleId = null;
 
@@ -86,7 +84,6 @@ public class RepaymentService {
                         "Installment #" + targetSlot.getInstallmentNo() + " is already PAID.");
             }
 
-            // Auto-amount = balance remaining on this specific installment
             BigDecimal balance = targetSlot.getBalanceDue() != null
                     ? targetSlot.getBalanceDue()
                     : targetSlot.getTotalDue();
@@ -99,7 +96,6 @@ public class RepaymentService {
             }
             amount = req.getAmount().setScale(2, RoundingMode.HALF_UP);
 
-            // ── Overpayment guard ─────────────────────────────────────────────
             BigDecimal outstandingBalance = scheduleRepo
                     .findUnpaidByLoan(loan.getLoanAccountId(), InstallmentStatus.PAID)
                     .stream()
@@ -123,19 +119,15 @@ public class RepaymentService {
                 .createdDate(LocalDateTime.now())
                 .build());
 
-        // ── Allocate to schedule ──────────────────────────────────────────────
         if (targetScheduleId != null) {
-            // Schedule-targeted: mark exactly this slot as PAID
             allocateToSpecificSchedule(targetScheduleId, amount, req.getPaymentDate());
         } else {
-            // Undirected: waterfall allocation across all DUE slots
             allocateWaterfall(loan.getLoanAccountId(), amount, req.getPaymentDate());
         }
 
         dpdService.computeAndUpsert(loan.getLoanAccountId());
         penalSchedulingService.processLoan(loan, req.getPaymentDate());
 
-        // Notify applicant
         if (loan.getApplication() != null && loan.getApplication().getCreatedBy() != null) {
             notificationService.notifyRepaymentReceived(
                     loan.getApplication().getCreatedBy().getEmail(),
@@ -153,8 +145,6 @@ public class RepaymentService {
         return repayRepo.findByLoanAccount_LoanAccountIdOrderByPaymentDateDesc(loanAccountId)
                 .stream().map(this::toDto).toList();
     }
-
-    // ── Private: targeted allocation (schedule-id driven) ─────────────────
 
     private void allocateToSpecificSchedule(Long scheduleId, BigDecimal amount, LocalDate paymentDate) {
         RepaymentSchedule s = scheduleRepo.findById(scheduleId)
@@ -176,8 +166,6 @@ public class RepaymentService {
         scheduleRepo.save(s);
     }
 
-    // ── Private: waterfall allocation (no scheduleId given) ───────────────
-
     private void allocateWaterfall(Long loanAccountId, BigDecimal amount, LocalDate paymentDate) {
         BigDecimal remaining = amount.setScale(2, RoundingMode.HALF_UP);
 
@@ -190,7 +178,6 @@ public class RepaymentService {
             BigDecimal balance = s.getBalanceDue() != null ? s.getBalanceDue()
                     : (s.getTotalDue() != null ? s.getTotalDue() : BigDecimal.ZERO);
 
-            // Already fully paid — ensure status is PAID and move on
             if (balance.compareTo(BigDecimal.ZERO) <= 0) {
                 if (s.getStatus() != InstallmentStatus.PAID) {
                     s.setAmountPaid(s.getTotalDue());

@@ -31,16 +31,12 @@ public class KycController {
         this.appRepo               = appRepo;
     }
 
-    // ── WRITE: APPLICANT / AGENT only (Admin cannot create or verify KYC) ──
-
-    /** POST /kyc/initialize — auto-populates from LoanApplication. Idempotent. */
     @PostMapping("/initialize")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT')")
     public ApiResponse<KycResponse> initialize(@Valid @RequestBody InitKycRequest req) {
         return ApiResponse.ok("KYC initialized", kycService.initializeKYC(req));
     }
 
-    /** PATCH /kyc/{kycId}/verify — Agent verifies KYC (cascades promoter status) */
     @PatchMapping("/{kycId}/verify")
     @PreAuthorize("hasAnyRole('AGENT')")
     public ApiResponse<KycResponse> verify(@PathVariable Long kycId,
@@ -48,7 +44,7 @@ public class KycController {
         return ApiResponse.ok("KYC verified", kycService.verify(kycId, req));
     }
 
-    /** PATCH /kyc/{kycId}/reject — Agent rejects KYC */
+
     @PatchMapping("/{kycId}/reject")
     @PreAuthorize("hasAnyRole('AGENT')")
     public ApiResponse<KycResponse> reject(@PathVariable Long kycId,
@@ -56,16 +52,12 @@ public class KycController {
         return ApiResponse.ok("KYC rejected", kycService.reject(kycId, req));
     }
 
-    // ── READ: Admin can monitor; Agent/UW can view ────────────────────
-
-    /** GET /kyc — Agent/Admin: all KYC records (Admin: read-only monitor) */
     @GetMapping
     @PreAuthorize("hasAnyRole('AGENT','ADMIN')")
     public ApiResponse<List<KycResponse>> listAll() {
         return ApiResponse.ok("All KYC records fetched", kycService.listAll());
     }
 
-    /** GET /kyc/pending — Agent queue (Admin can view for monitoring only) */
     @GetMapping("/pending")
     @PreAuthorize("hasAnyRole('AGENT','ADMIN')")
     public ApiResponse<List<KycResponse>> listPending() {
@@ -90,10 +82,6 @@ public class KycController {
         return ApiResponse.ok("KYC list fetched", kycService.listBySme(smeId));
     }
 
-    // ── KYC READINESS CHECK (merged from KycReadinessController) ────
-
-    /** GET /kyc/applications/{appId}/readiness
-     *  Returns exactly which KYC checks are blocking submission. */
     @GetMapping("/applications/{appId}/readiness")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT','ADMIN','UNDERWRITER')")
     public ApiResponse<Map<String, Object>> checkReadiness(@PathVariable Long appId) {

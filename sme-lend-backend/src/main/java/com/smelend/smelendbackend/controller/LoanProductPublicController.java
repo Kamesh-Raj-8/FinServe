@@ -11,11 +11,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Public (all authenticated users) read-only loan product listing.
- * Used by APPLICANT/AGENT when creating loan applications.
- * Only returns ACTIVE products.
- */
 @RestController
 @RequestMapping("/loan-products")
 @PreAuthorize("isAuthenticated()")

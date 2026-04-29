@@ -28,42 +28,36 @@ public class CollectionsController {
         this.chargeService      = chargeService;
     }
 
-    // View delinquency for a loan account
     @GetMapping("/loan-accounts/{loanAccountId}/delinquency")
     @PreAuthorize("hasAnyRole('COLLECTIONS','ADMIN','SERVICING')")
     public ApiResponse<DelinquencyResponse> getDelinquency(@PathVariable Long loanAccountId) {
         return ApiResponse.ok("Delinquency fetched", collectionsService.getDelinquency(loanAccountId));
     }
 
-    // Collections list all delinquencies
     @GetMapping("/delinquencies")
     @PreAuthorize("hasAnyRole('COLLECTIONS','ADMIN','RISK')")
     public ApiResponse<List<DelinquencyResponse>> listAll() {
         return ApiResponse.ok("Delinquencies fetched", collectionsService.listAllDelinquencies());
     }
 
-    // Collections creates PTP
     @PostMapping("/ptp")
     @PreAuthorize("hasAnyRole('COLLECTIONS')")
     public ApiResponse<PtpResponse> createPtp(@Valid @RequestBody CreatePtpRequest req) {
         return ApiResponse.ok("PTP created", collectionsService.createPtp(req));
     }
 
-    // List PTPs for a loan account
     @GetMapping("/loan-accounts/{loanAccountId}/ptp")
     @PreAuthorize("hasAnyRole('COLLECTIONS')")
     public ApiResponse<List<PtpResponse>> listPtps(@PathVariable Long loanAccountId) {
         return ApiResponse.ok("PTPs fetched", collectionsService.listPtps(loanAccountId));
     }
 
-    // Update PTP status
     @PatchMapping("/ptp/{ptpId}/status")
     @PreAuthorize("hasAnyRole('COLLECTIONS')")
     public ApiResponse<PtpResponse> updatePtpStatus(@PathVariable Long ptpId, @RequestParam PtpStatus status) {
         return ApiResponse.ok("PTP status updated", collectionsService.updatePtpStatus(ptpId, status));
     }
 
-    // ── CHARGES (merged — Collections manages loan charges) ─────────
 
     @PostMapping("/charges")
     @PreAuthorize("hasAnyRole('OPERATIONS','COLLECTIONS')")

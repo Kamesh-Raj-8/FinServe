@@ -28,8 +28,6 @@ public class EligibilityService {
         this.appRepo     = appRepo;
     }
 
-    // ── CRUD ─────────────────────────────────────────────────────────
-
     public EligibilityPolicyResponse create(EligibilityPolicyRequest req) {
         LoanProduct product = productRepo.findById(req.getProductId())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Product not found"));
@@ -63,8 +61,6 @@ public class EligibilityService {
         policyRepo.save(p);
     }
 
-    // ── CHECK: validate application against its product's active policies ──
-
     public EligibilityCheckResult checkApplication(Long applicationId) {
         LoanApplication app = appRepo.findById(applicationId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Application not found"));
@@ -83,18 +79,17 @@ public class EligibilityService {
             boolean pass = true;
             StringBuilder reason = new StringBuilder(pol.getRuleName() + ": ");
 
-            // Amount cap
             if (pol.getMaxAmountCap() != null && amount.compareTo(pol.getMaxAmountCap()) > 0) {
                 pass = false;
                 reason.append("Amount ").append(amount).append(" > cap ").append(pol.getMaxAmountCap());
             }
-            // Product min/max amount
+
             if (amount.compareTo(prod.getMinAmount()) < 0 || amount.compareTo(prod.getMaxAmount()) > 0) {
                 pass = false;
                 reason.append("Amount outside product range [").append(prod.getMinAmount())
                       .append(", ").append(prod.getMaxAmount()).append("]");
             }
-            // Tenor range
+
             if (tenor < prod.getMinTenorMonths() || tenor > prod.getMaxTenorMonths()) {
                 pass = false;
                 reason.append("Tenor ").append(tenor).append(" outside product range");
@@ -104,7 +99,6 @@ public class EligibilityService {
             else      failed.add(reason.toString());
         }
 
-        // Basic product-level checks even with no explicit policies
         if (policies.isEmpty()) {
             if (amount.compareTo(prod.getMinAmount()) < 0 || amount.compareTo(prod.getMaxAmount()) > 0)
                 failed.add("Amount outside product range");

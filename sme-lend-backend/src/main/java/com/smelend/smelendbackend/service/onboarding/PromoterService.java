@@ -61,7 +61,6 @@ public class PromoterService {
         return toDto(saved);
     }
 
-    /** Agent/Admin/UW can view promoters for any SME; Applicant only for their own */
     public List<PromoterResponse> listBySme(Long smeId) {
         AppUser me = currentUserService.getCurrentUser();
         Sme sme = smeRepo.findById(smeId)
@@ -77,7 +76,6 @@ public class PromoterService {
         return promoterRepo.findBySme_SmeId(smeId).stream().map(this::toDto).toList();
     }
 
-    /** Agent/Admin/UW can fetch any promoter by ID */
     public PromoterResponse get(Long promoterId) {
         AppUser me = currentUserService.getCurrentUser();
         Promoter p = promoterRepo.findById(promoterId)

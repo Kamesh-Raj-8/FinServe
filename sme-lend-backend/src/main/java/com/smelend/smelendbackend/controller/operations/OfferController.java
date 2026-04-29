@@ -20,7 +20,6 @@ public class OfferController {
         this.offerService = offerService;
     }
 
-    // OPERATIONS creates offer
     @PostMapping("/applications/{applicationId}")
     @PreAuthorize("hasAnyRole('OPERATIONS')")
     public ApiResponse<OfferResponse> createOffer(
@@ -30,28 +29,24 @@ public class OfferController {
         return ApiResponse.ok("Offer created", offerService.createOffer(applicationId, req));
     }
 
-    // Applicant/Agent accepts offer
     @PatchMapping("/{offerId}/accept")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT')")
     public ApiResponse<OfferResponse> accept(@PathVariable Long offerId) {
         return ApiResponse.ok("Offer accepted", offerService.acceptOffer(offerId));
     }
 
-    // Applicant/Agent rejects offer
     @PatchMapping("/{offerId}/reject")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT')")
     public ApiResponse<OfferResponse> reject(@PathVariable Long offerId) {
         return ApiResponse.ok("Offer rejected", offerService.rejectOffer(offerId));
     }
 
-    // View offer
     @GetMapping("/{offerId}")
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT','OPERATIONS')")
     public ApiResponse<OfferResponse> get(@PathVariable Long offerId) {
         return ApiResponse.ok("Offer fetched", offerService.get(offerId));
     }
 
-    // List offers (Ops/Admin = all, Applicant/Agent = only mine)
     @GetMapping
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT','OPERATIONS')")
     public ApiResponse<List<OfferResponse>> list() {

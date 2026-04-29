@@ -14,16 +14,6 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * In-app notification service — Database-as-Queue model.
- *
- * Delivery strategy:
- *   deliverToUser(email, ...)  → writes ONE record for a specific user
- *   deliverToRole(role, ...)   → writes N records, one per active user with that role
- *
- * No email, SMS, or WebSocket. Frontend polls /notifications/unread-count every 30 s
- * and fetches the full list only when the user opens the notification panel.
- */
 @Service
 public class NotificationService {
 
@@ -38,13 +28,6 @@ public class NotificationService {
         this.userRepo  = userRepo;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  BUSINESS EVENT TRIGGERS
-    //  Each method defines: WHAT happened, WHO needs to know.
-    // ═══════════════════════════════════════════════════════════════
-
-    // ── Onboarding ────────────────────────────────────────────────
-
     public void notifyRegistrationSuccess(String email, String fullName) {
         deliverToUser(email,
                 "Welcome to FinServe! 🎉",
@@ -52,15 +35,11 @@ public class NotificationService {
                 "ONBOARDING", null, null);
     }
 
-    // ── KYC ───────────────────────────────────────────────────────
-
     public void notifyKycCreated(String email, String fullName, Long kycId) {
-        // Applicant: KYC submitted
         deliverToUser(email,
                 "KYC Submitted",
                 "Your KYC record #" + kycId + " has been submitted. An agent will verify it shortly.",
                 "ONBOARDING", "KYC", kycId);
-        // Agents: new KYC waiting in queue
         deliverToRole(RoleName.AGENT,
                 "New KYC Pending Verification",
                 "KYC #" + kycId + " for " + fullName + " is awaiting verification.",
@@ -68,7 +47,6 @@ public class NotificationService {
     }
 
     public void notifyKycVerified(String email, String fullName, Long kycId) {
-        // Applicant: KYC approved
         deliverToUser(email,
                 "KYC Verified ✓",
                 "Your KYC #" + kycId + " has been verified. You may now submit your loan application.",
@@ -82,8 +60,6 @@ public class NotificationService {
                 "ONBOARDING", "KYC", kycId);
     }
 
-    // ── Application ───────────────────────────────────────────────
-
     public void notifyLoanApplicationCreated(String email, String fullName, Long appId) {
         deliverToUser(email,
                 "Application #" + appId + " Created",
@@ -92,12 +68,10 @@ public class NotificationService {
     }
 
     public void notifyRoutedToUnderwriter(String email, String fullName, Long appId) {
-        // Applicant: application is now in review
         deliverToUser(email,
                 "Application Under Review",
                 "Application #" + appId + " has been sent to our underwriting team. Response within 2 business days.",
                 "UNDERWRITING", "APPLICATION", appId);
-        // All Underwriters: new application in their queue
         deliverToRole(RoleName.UNDERWRITER,
                 "New Application in UW Queue",
                 "Application #" + appId + " from " + fullName + " is ready for underwriting review.",
@@ -105,12 +79,10 @@ public class NotificationService {
     }
 
     public void notifyUnderwriterApproved(String email, String fullName, Long appId) {
-        // Applicant: great news
         deliverToUser(email,
                 "Application Approved! 🎉",
                 "Congratulations! Application #" + appId + " has been approved. An offer will be ready shortly.",
                 "UNDERWRITING", "APPLICATION", appId);
-        // Operations: create an offer
         deliverToRole(RoleName.OPERATIONS,
                 "Application Approved — Offer Required",
                 "Application #" + appId + " (" + fullName + ") has been UW-approved. Create a loan offer.",
@@ -125,19 +97,15 @@ public class NotificationService {
     }
 
     public void notifyApplicationReturned(String email, String fullName, Long appId, String reason) {
-        // Applicant: action required
         deliverToUser(email,
                 "Action Required on Application #" + appId,
                 "Your application #" + appId + " has been returned for KYC re-verification. Reason: " + reason,
                 "UNDERWRITING", "APPLICATION", appId);
-        // Agent managing this applicant
         deliverToRole(RoleName.AGENT,
                 "Application #" + appId + " Returned — KYC Re-verify Needed",
                 "Application #" + appId + " (" + fullName + ") was returned by the underwriter. Assist with KYC re-verification.",
                 "UNDERWRITING", "APPLICATION", appId);
     }
-
-    // ── Offer ─────────────────────────────────────────────────────
 
     public void notifyOfferCreated(String email, String fullName, Long appId, String amount) {
         deliverToUser(email,
@@ -147,7 +115,6 @@ public class NotificationService {
     }
 
     public void notifyOfferAccepted(Long appId, String fullName) {
-        // Operations: proceed to disbursement
         deliverToRole(RoleName.OPERATIONS,
                 "Offer Accepted — Ready to Disburse",
                 fullName + " has accepted the offer for application #" + appId + ". Proceed with disbursement.",
@@ -161,22 +128,16 @@ public class NotificationService {
                 "OFFER", "APPLICATION", appId);
     }
 
-    // ── Disbursement ──────────────────────────────────────────────
-
     public void notifyLoanDisbursed(String email, String fullName, Long loanAccountId, String amount) {
-        // Applicant: money is on the way
         deliverToUser(email,
                 "Loan Disbursed 🏦",
                 "₹" + amount + " has been disbursed to your account. Loan Account: #" + loanAccountId + ".",
                 "DISBURSEMENT", "LOAN_ACCOUNT", loanAccountId);
-        // Servicing: begin tracking repayments
         deliverToRole(RoleName.SERVICING,
                 "New Active Loan — Servicing Required",
                 "Loan Account #" + loanAccountId + " for " + fullName + " is now ACTIVE (₹" + amount + " disbursed).",
                 "DISBURSEMENT", "LOAN_ACCOUNT", loanAccountId);
     }
-
-    // ── Servicing ─────────────────────────────────────────────────
 
     public void notifyRepaymentReceived(String email, String fullName, String amount, String refNo) {
         deliverToUser(email,
@@ -192,15 +153,11 @@ public class NotificationService {
                 "SERVICING", null, null);
     }
 
-    // ── Collections ───────────────────────────────────────────────
-
     public void notifyDelinquencyAlert(String email, String fullName, int overdueDays, String amount) {
-        // Applicant: overdue warning
         deliverToUser(email,
                 "⚠ Overdue EMI — " + overdueDays + " day(s)",
                 "Your EMI of ₹" + amount + " is " + overdueDays + " day(s) overdue. A penal charge has been applied.",
                 "COLLECTIONS", null, null);
-        // Collections team: needs follow-up
         deliverToRole(RoleName.COLLECTIONS,
                 "Delinquency Alert — " + overdueDays + " DPD",
                 fullName + " has an overdue EMI of ₹" + amount + " (" + overdueDays + " days past due). Follow up required.",
@@ -214,8 +171,6 @@ public class NotificationService {
                 "COLLECTIONS", null, null);
     }
 
-    // ── Document upload (Agent → Applicant) ───────────────────────
-
     public void notifyDocumentRequired(String email, String fullName, Long appId) {
         deliverToUser(email,
                 "Documents Required for Application #" + appId,
@@ -224,17 +179,11 @@ public class NotificationService {
                 "ONBOARDING", "APPLICATION", appId);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  REST QUERY METHODS (used by NotificationEndpoints)
-    // ═══════════════════════════════════════════════════════════════
-
-    /** Full payload — called only when user opens the notification panel */
     public List<NotificationResponse> getForUser(Long userId) {
         return notifRepo.findByUser_UserIdOrderByCreatedAtDesc(userId)
                 .stream().limit(50).map(this::toDto).collect(Collectors.toList());
     }
 
-    /** Lightweight count — called by the 30-second background poll */
     public long countUnread(Long userId) {
         return notifRepo.countByUser_UserIdAndIsReadFalse(userId);
     }
@@ -247,13 +196,6 @@ public class NotificationService {
         notifRepo.markOneRead(notifId, userId);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  CORE DELIVERY — private
-    // ═══════════════════════════════════════════════════════════════
-
-    /**
-     * User-based: writes exactly ONE notification for the given email address.
-     */
     @Async
     public void deliverToUser(String email, String title, String body,
                                String category, String entityType, Long entityId) {
@@ -261,10 +203,6 @@ public class NotificationService {
                 persist(user, title, body, category, entityType, entityId));
     }
 
-    /**
-     * Role-based: writes one notification record per active user in that role.
-     * If the role has 10 users → 10 DB rows are created.
-     */
     @Async
     public void deliverToRole(RoleName role, String title, String body,
                                String category, String entityType, Long entityId) {
@@ -275,7 +213,6 @@ public class NotificationService {
         log.info("[NOTIF-ROLE] {} → {} ({} recipients)", title, role, targets.size());
     }
 
-    /** Writes a single UNREAD InAppNotification row to the database */
     private void persist(AppUser user, String title, String body,
                          String category, String entityType, Long entityId) {
         notifRepo.save(InAppNotification.builder()

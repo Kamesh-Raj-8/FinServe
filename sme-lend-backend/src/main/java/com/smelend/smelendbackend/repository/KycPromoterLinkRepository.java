@@ -12,11 +12,9 @@ public interface KycPromoterLinkRepository extends JpaRepository<KycPromoterLink
 
     List<KycPromoterLink> findByKycRecord_KycId(Long kycId);
 
-    /** 'main' is the field name — Lombok generates isMain() getter but JPA uses field name */
     @Query("SELECT l FROM KycPromoterLink l WHERE l.kycRecord.kycId = :kycId AND l.main = true")
     Optional<KycPromoterLink> findMainByKycId(@Param("kycId") Long kycId);
 
-    /** Promoter links whose underlying promoter kycStatus is NOT VERIFIED */
     @Query("SELECT l FROM KycPromoterLink l "
          + "WHERE l.kycRecord.kycId = :kycId "
          + "AND l.promoter.kycStatus != 'VERIFIED'")

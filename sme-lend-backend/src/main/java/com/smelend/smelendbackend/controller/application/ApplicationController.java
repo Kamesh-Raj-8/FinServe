@@ -32,7 +32,7 @@ public class ApplicationController {
         this.documentService     = documentService;
     }
 
-    // ── WRITE: APPLICANT / AGENT only (Admin cannot create) ──────────
+
 
     @PostMapping
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT')")
@@ -65,7 +65,6 @@ public class ApplicationController {
                 documentService.uploadFile(applicationId, file, docType));
     }
 
-    // ── READ: Applicant/Agent see own; Admin/UW see all ───────────────
 
     @GetMapping
     @PreAuthorize("hasAnyRole('APPLICANT','AGENT','ADMIN')")

@@ -45,32 +45,25 @@ public class DocumentService {
         this.uploadRoot       = Paths.get(uploadDir).toAbsolutePath().normalize();
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  FINANCIAL DOCUMENTS — linked to LoanApplication (one per DocType)
-    // ═══════════════════════════════════════════════════════════════════
 
-    /** URI-based add — upserts: replaces existing docType record if present */
     public DocumentResponse add(Long applicationId, AddDocumentRequest req) {
         AppUser me = currentUserService.getCurrentUser();
         LoanApplication app = requireWriteAccess(applicationId, me);
         return upsertUri(app, req.getDocType(), req.getFileUri(), me);
     }
 
-    /** File upload — upserts: replaces existing docType record if present */
     public DocumentResponse uploadFile(Long applicationId, MultipartFile file, DocType docType) {
         AppUser me = currentUserService.getCurrentUser();
         LoanApplication app = requireWriteAccess(applicationId, me);
         return upsertFile(app, docType, file, me);
     }
 
-    /** List all financial docs for an application */
     public List<DocumentResponse> list(Long applicationId) {
         requireReadAccess(applicationId, currentUserService.getCurrentUser());
         return docRepo.findByApplication_ApplicationId(applicationId)
                 .stream().map(d -> toDto(d, false)).toList();
     }
 
-    /** Download bytes for a financial document */
     public byte[] downloadFile(Long applicationId, Long documentId) {
         requireReadAccess(applicationId, currentUserService.getCurrentUser());
         Document doc = docRepo.findById(documentId)
@@ -86,11 +79,6 @@ public class DocumentService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Document not found"));
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  KYC DOCUMENTS — linked to Promoter (one per DocType, permanent)
-    // ═══════════════════════════════════════════════════════════════════
-
-    /** Upload or replace a KYC document for a promoter */
     public PromoterDocumentResponse uploadPromoterDoc(Long promoterId, MultipartFile file, DocType docType) {
         AppUser me = currentUserService.getCurrentUser();
         Promoter promoter = promoterRepo.findById(promoterId)
@@ -108,7 +96,6 @@ public class DocumentService {
         try { Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING); }
         catch (IOException e) { throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save file"); }
 
-        // Upsert: one record per (promoter, docType)
         Optional<PromoterDocument> existing = promoterDocRepo
                 .findByPromoter_PromoterIdAndDocType(promoterId, docType);
 
@@ -129,13 +116,11 @@ public class DocumentService {
         return toPromoterDto(saved, isReplace);
     }
 
-    /** List all KYC docs for a promoter */
     public List<PromoterDocumentResponse> listPromoterDocs(Long promoterId) {
         return promoterDocRepo.findByPromoter_PromoterIdOrderByDocType(promoterId)
                 .stream().map(d -> toPromoterDto(d, false)).toList();
     }
 
-    /** Download a promoter KYC document */
     public byte[] downloadPromoterDoc(Long promoterId, DocType docType) {
         PromoterDocument doc = promoterDocRepo
                 .findByPromoter_PromoterIdAndDocType(promoterId, docType)
@@ -144,9 +129,6 @@ public class DocumentService {
         return readBytes(doc.getFileUri(), doc.getFileName());
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  PRIVATE HELPERS
-    // ═══════════════════════════════════════════════════════════════════
 
     private DocumentResponse upsertFile(LoanApplication app, DocType docType,
                                          MultipartFile file, AppUser me) {

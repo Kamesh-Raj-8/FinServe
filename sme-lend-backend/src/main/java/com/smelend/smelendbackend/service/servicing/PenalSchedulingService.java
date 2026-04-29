@@ -86,10 +86,7 @@ public class PenalSchedulingService {
             BigDecimal delta = calculatedTotalPenal.subtract(currentPenalInSchedule).max(BigDecimal.ZERO);
 
             if (delta.compareTo(BigDecimal.ZERO) > 0) {
-                // UPDATE THE OVERDUE INSTALLMENT BALANCE DIRECTLY
                 s.setPenalAmount(calculatedTotalPenal);
-                
-                // CRITICAL: Update the total and balance due of THIS installment
                 s.setTotalDue(s.getTotalDue().add(delta).setScale(2, RoundingMode.HALF_UP));
                 s.setBalanceDue(s.getBalanceDue().add(delta).setScale(2, RoundingMode.HALF_UP));
                 
@@ -101,8 +98,7 @@ public class PenalSchedulingService {
 
         if (totalNewPenalDelta.compareTo(BigDecimal.ZERO) > 0) {
             chargeService.postPenalCharge(loan, maxDpd, finePerDay);
-            
-            // This is kept to ensure the "Next" upcoming payment also shows the updated penalty if required
+
             recalculateNextEMI(loan, totalNewPenalDelta);
             
             dpdService.computeAndUpsert(loan.getLoanAccountId());
@@ -117,23 +113,18 @@ public class PenalSchedulingService {
             var fees = feeService.calculateFees(product.getProductId(), loan.getPrincipalSanctioned());
             fine = DisbursementCalculator.penalFeePerDay(fees);
         }
-        // Demo Fallback
         return (fine.compareTo(BigDecimal.ZERO) <= 0) ? new BigDecimal("50.00") : fine;
     }
 
     @Transactional
     public void recalculateNextEMI(LoanAccount loan, BigDecimal penalToAdd) {
         List<RepaymentSchedule> schedules = scheduleRepo.findByLoanAccount_LoanAccountIdOrderByInstallmentNoAsc(loan.getLoanAccountId());
-
-        // Find the installment that is DUE (Future)
         RepaymentSchedule target = schedules.stream()
                 .filter(s -> s.getStatus() == InstallmentStatus.DUE 
                           && (s.getDueDate() == null || !s.getDueDate().isBefore(LocalDate.now())))
                 .findFirst()
                 .orElse(null);
 
-        // If a future installment exists, we ensure its balance reflects the penalty too 
-        // (depending on how your UI sums up the totals)
         if (target != null) {
             target.setTotalDue(target.getTotalDue().add(penalToAdd).setScale(2, RoundingMode.HALF_UP));
             target.setBalanceDue(target.getBalanceDue().add(penalToAdd).setScale(2, RoundingMode.HALF_UP));

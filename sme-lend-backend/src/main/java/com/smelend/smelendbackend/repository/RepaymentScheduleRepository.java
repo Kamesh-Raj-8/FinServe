@@ -12,8 +12,7 @@ import java.util.List;
 public interface RepaymentScheduleRepository extends JpaRepository<RepaymentSchedule, Long> {
  
     List<RepaymentSchedule> findByLoanAccount_LoanAccountIdOrderByInstallmentNoAsc(Long loanAccountId);
- 
-    /** Unpaid installments for a specific loan, oldest first */
+
     @Query("SELECT s FROM RepaymentSchedule s "
          + "WHERE s.loanAccount.loanAccountId = :loanId "
          + "AND s.status <> :paidStatus "
@@ -21,27 +20,17 @@ public interface RepaymentScheduleRepository extends JpaRepository<RepaymentSche
     List<RepaymentSchedule> findUnpaidByLoan(@Param("loanId") Long loanId,
                                               @Param("paidStatus") InstallmentStatus paidStatus);
  
-    /**
-     * Distinct loan account IDs that have at least one overdue unpaid installment.
-     * UPDATED: Changed < to <= to catch installments due today for demo purposes.
-     */
+
     @Query("SELECT DISTINCT s.loanAccount.loanAccountId FROM RepaymentSchedule s "
          + "WHERE s.dueDate <= :today AND s.status <> :paidStatus")
     List<Long> findAllOverdueLoanIds(@Param("today") LocalDate today,
                                      @Param("paidStatus") InstallmentStatus paidStatus);
- 
-    /**
-     * All overdue installments across all loans, with loanAccount eagerly joined.
-     * UPDATED: Changed < to <= to catch installments due today for demo purposes.
-     */
+
     @Query("SELECT s FROM RepaymentSchedule s JOIN FETCH s.loanAccount "
          + "WHERE s.dueDate <= :today AND s.status <> :paidStatus")
     List<RepaymentSchedule> findAllOverdue(@Param("today") LocalDate today,
                                            @Param("paidStatus") InstallmentStatus paidStatus);
- 
-    /** * Overdue installments for a specific loan 
-     * UPDATED: Changed < to <= to catch installments due today for demo purposes.
-     */
+
     @Query("SELECT s FROM RepaymentSchedule s "
          + "WHERE s.loanAccount.loanAccountId = :loanId "
          + "AND s.dueDate <= :today AND s.status <> :paidStatus")

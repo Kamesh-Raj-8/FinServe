@@ -30,11 +30,8 @@ public class ChargeService {
         this.currentUserService = currentUserService;
     }
 
-    // ── Manual charge posting (Ops / Collections) ─────────────────────
 
     public ChargeResponse post(ChargeRequest req) {
-        // COLLECTIONS may only post PENAL charges — standard fee types are
-        // the exclusive domain of OPERATIONS to prevent misuse.
         if (currentUserService.hasRole("COLLECTIONS")
                 && req.getChargeType() != ChargeType.PENAL) {
             throw new ApiException(HttpStatus.FORBIDDEN,
@@ -57,7 +54,6 @@ public class ChargeService {
         return toDto(chargeRepo.save(c));
     }
 
-    /** Auto-post a processing fee charge at disbursement. */
     public ChargeResponse postProcessingFee(LoanAccount loan, BigDecimal feeAmount) {
         Charge c = Charge.builder()
                 .loanAccount(loan)
@@ -71,10 +67,6 @@ public class ChargeService {
         return toDto(chargeRepo.save(c));
     }
 
-    /**
-     * Auto-post penal charges for overdue installments.
-     * Rate = product.delinquencyFinePerDay × DPD.
-     */
     public ChargeResponse postPenalCharge(LoanAccount loan, int dpd, BigDecimal finePerDay) {
         BigDecimal amount = finePerDay.multiply(BigDecimal.valueOf(dpd))
                 .setScale(2, RoundingMode.HALF_UP);

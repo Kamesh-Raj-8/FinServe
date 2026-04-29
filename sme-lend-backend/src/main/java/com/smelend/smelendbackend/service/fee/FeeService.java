@@ -25,8 +25,7 @@ public class FeeService {
         this.feeRepo     = feeRepo;
         this.productRepo = productRepo;
     }
- 
-    // ── CRUD ─────────────────────────────────────────────────────────
+
  
     public FeeConfigResponse create(FeeConfigRequest req) {
         LoanProduct product = productRepo.findById(req.getProductId())
@@ -57,23 +56,12 @@ public class FeeService {
         f.setStatus(StatusFlag.INACTIVE);
         feeRepo.save(f);
     }
- 
-    // ── Calculate fees for a given product + sanctioned amount ────────
- 
-    /**
-     * Returns list of applicable fees and their calculated INR amounts.
-     * Used at disbursement to show the net disbursed amount and by the Penal Scheduler.
-     */
+
     public List<AppliedFeeDto> calculateFees(Long productId, BigDecimal sanctionedAmount) {
         LocalDate today = LocalDate.now();
-        // Fetch all ACTIVE fees for the product
+
         List<FeeConfig> configs = feeRepo.findByProduct_ProductIdAndStatus(productId, StatusFlag.ACTIVE)
                 .stream()
-                /* * UPDATED FOR DEMO: 
-                 * We relax the strict "isBefore" and "isAfter" date checks.
-                 * This ensures that if a PENAL fee is created 'Today', it is picked up immediately
-                 * regardless of the specific time/timestamp comparison.
-                 */
                 .filter(f -> f.getFeeType() == FeeType.PENAL || (
                            (f.getEffectiveFrom() == null || !today.isBefore(f.getEffectiveFrom()))
 && (f.getEffectiveTo()   == null || !today.isAfter(f.getEffectiveTo()))

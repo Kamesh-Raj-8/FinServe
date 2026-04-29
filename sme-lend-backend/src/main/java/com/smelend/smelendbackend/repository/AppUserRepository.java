@@ -13,10 +13,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
     Optional<AppUser> findByEmail(String email);
 
-    /** All active users with a specific role — used for role-based notification broadcast */
     @Query("SELECT u FROM AppUser u WHERE u.role.roleName = :role AND u.status = 'ACTIVE'")
     List<AppUser> findActiveByRole(@Param("role") RoleName role);
 
-    /** Find a specific user by ID */
     Optional<AppUser> findByUserId(Long userId);
 }
