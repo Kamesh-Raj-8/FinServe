@@ -22,7 +22,7 @@ public class Scorecard {
     @JoinColumn(name = "application_id")
     private LoanApplication application;
 
-    @Column(name = "model_version", length = 20)
+    @Column(name = "model_version", length = 50)
     private String modelVersion;
 
     /** JSON snapshot of inputs used (requestedAmount, tenor, creditScore, etc.) */

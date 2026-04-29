@@ -18,7 +18,6 @@ import org.springframework.http.HttpStatus;
 import com.smelend.smelendbackend.service.notification.NotificationService;
 import com.smelend.smelendbackend.repository.AppUserRepository;
 import com.smelend.smelendbackend.repository.ScorecardRepository;
-import com.smelend.smelendbackend.entity.enums.ScoreBand;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -73,15 +72,17 @@ public class UnderwritingService {
 
         UwDecision decision = req.getDecision();
 
-        // ── Hard CIBIL constraint — cannot be overridden by underwriter ──
-        // Approval is blocked at system level if score < 700 (MEDIUM or below).
+        // ── Hard score constraint — dynamically derived from the loan product ──
+        // Approval is blocked when the scorecard band is POOR (score < product.creditThreshold).
         if (decision == UwDecision.APPROVE) {
+            int productThreshold = resolveThreshold(app);
             scorecardRepo.findByApplication_ApplicationId(applicationId).ifPresent(sc -> {
-                if (sc.getScoreValue() < 700) {
+                if (sc.getScoreValue() < productThreshold) {
                     throw new ApiException(HttpStatus.BAD_REQUEST,
-                            "Cannot approve application #" + applicationId +
-                            ". CIBIL score is " + sc.getScoreValue() + " (minimum required: 700). " +
-                            "This is a hard system constraint that cannot be manually overridden.");
+                            "Cannot approve application #" + applicationId
+                            + ". Score " + sc.getScoreValue()
+                            + " is below the product threshold of " + productThreshold
+                            + " (POOR band). This is a hard system constraint — Below Product Threshold.");
                 }
             });
         }
@@ -147,6 +148,12 @@ public class UnderwritingService {
                 .createdDate(saved.getCreatedDate())
                 .newApplicationStatus(newStatus)
                 .build();
+    }
+
+    private int resolveThreshold(LoanApplication app) {
+        if (app.getProduct() == null || app.getProduct().getCreditThreshold() == null) return 700;
+        java.math.BigDecimal t = app.getProduct().getCreditThreshold();
+        return t.compareTo(java.math.BigDecimal.ZERO) > 0 ? t.intValue() : 700;
     }
 
     private void requireUnderwriterOrAdmin(AppUser me) {

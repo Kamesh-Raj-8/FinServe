@@ -17,12 +17,29 @@
     <div class="col-lg-4">
       <div class="card">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
-          <span class="card-title"><i class="bi bi-list-ul"></i> UW Queue ({{ queue().length }})</span>
+          <span class="card-title"><i class="bi bi-list-ul"></i> UW Queue ({{ filteredQueue().length }})</span>
           <button class="btn btn-outline-secondary btn-sm" (click)="load()"><i class="bi bi-arrow-clockwise"></i></button>
         </div>
-        @if (loading()) { <div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary"></div></div> }
-        @else if (queue().length === 0) { <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2"><i class="bi bi-check-circle text-success" style="font-size:2rem;"></i><p>Queue is empty</p></div> }
-        @else {
+
+        <!-- Search input — filters queue synchronously via filteredQueue computed signal -->
+        <div style="padding:.5rem .5rem 0;">
+          <input class="form-control form-control-sm"
+                 type="search"
+                 placeholder="Search by ID, SME name or status…"
+                 [ngModel]="searchTerm()"
+                 (ngModelChange)="searchTerm.set($event); pgQueue.reset()">
+        </div>
+
+        @if (loading()) {
+          <div class="d-flex justify-content-center align-items-center py-5">
+            <div class="spinner-border text-primary"></div>
+          </div>
+        } @else if (filteredQueue().length === 0) {
+          <div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2">
+            <i class="bi bi-check-circle text-success" style="font-size:2rem;"></i>
+            <p>{{ queue().length === 0 ? 'Queue is empty' : 'No results for "' + searchTerm() + '"' }}</p>
+          </div>
+        } @else {
           <div style="padding:.5rem;">
             @for (a of pgQueue.paged(); track a.applicationId) {
               <div (click)="select(a)"
@@ -42,6 +59,9 @@
               </div>
             }
           </div>
+          <div style="padding:0 .5rem .5rem;">
+            <app-paginator [pg]="pgQueue"></app-paginator>
+          </div>
         }
       </div>
     </div>
@@ -52,7 +72,7 @@
         <div class="card"><div class="d-flex flex-column align-items-center justify-content-center text-muted py-5 gap-2"><i class="bi bi-arrow-left" style="font-size:2rem;"></i><p>Select an application from the queue to review</p></div></div>
       } @else {
 
-        <!-- Sub-Tabs: Details | SME | KYC | Promoters | Docs -->
+        <!-- Sub-Tabs -->
         <div class="fs-tab-group mb-2">
           <button class="fs-tab-btn" [class.active]="activeTab()==='details'" (click)="activeTab.set('details')"><i class="bi bi-info-circle me-1"></i>Details</button>
           <button class="fs-tab-btn" [class.active]="activeTab()==='sme'" (click)="activeTab.set('sme')"><i class="bi bi-building me-1"></i>SME</button>
@@ -63,11 +83,11 @@
           <button class="fs-tab-btn" [class.active]="activeTab()==='promoters'" (click)="activeTab.set('promoters')"><i class="bi bi-people me-1"></i>Promoters</button>
           <button class="fs-tab-btn" [class.active]="activeTab()==='scoring'" (click)="activeTab.set('scoring')">
             <i class="bi bi-graph-up me-1"></i>Score &amp; Decision
-            @if (decision()) {
+            @if (scorecard()) {
               <span class="badge-status ms-1"
-                    [style.background]="decisionColor(decision()!.path)+'22'"
-                    [style.color]="decisionColor(decision()!.path)"
-                    style="font-size:.6rem;">{{ decision()!.path }}</span>
+                    [style.background]="scoreBandBg(scorecard()!.scoreBand)"
+                    [style.color]="scoreBandColor(scorecard()!.scoreBand)"
+                    style="font-size:.6rem;">{{ scorecard()!.scoreBand }}</span>
             }
           </button>
           <button class="fs-tab-btn" [class.active]="activeTab()==='docs'" (click)="activeTab.set('docs')">
@@ -135,8 +155,7 @@
                       </tr>
                     }
                   </tbody>
-            </table>
-          <app-paginator [pg]="pgQueue"></app-paginator>
+                </table>
               </div>
             }
           </div>
@@ -168,6 +187,146 @@
           </div>
         }
 
+        <!-- Score & Decision Tab — single source of truth: all values from backend DecisionEngine -->
+        @if (activeTab() === 'scoring') {
+          <div class="card mb-3">
+            <div class="card-header d-flex align-items-center justify-content-between">
+              <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2">
+                <i class="bi bi-graph-up"></i> Score &amp; Decision
+              </span>
+              <button class="btn btn-outline-primary btn-sm" (click)="runScoring(app.applicationId)" [disabled]="loadingScore()">
+                @if (loadingScore()) { <span class="spinner-border spinner-border-sm"></span> Scoring… }
+                @else { <i class="bi bi-arrow-repeat me-1"></i>Re-score }
+              </button>
+            </div>
+
+            @if (loadingScore()) {
+              <div class="d-flex justify-content-center align-items-center py-5">
+                <div class="spinner-border text-primary"></div>
+              </div>
+            } @else {
+              <div class="card-body">
+
+                <!-- Scorecard -->
+                @if (scorecard()) {
+                  @let sc = scorecard()!;
+                  <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;margin-bottom:1.25rem;">
+                    <!-- Score dial -->
+                    <div style="text-align:center;min-width:80px;">
+                      <div style="font-family:var(--font-head);font-size:2.5rem;font-weight:800;"
+                           [style.color]="scoreBandColor(sc.scoreBand)">
+                        {{ sc.scoreValue }}
+                      </div>
+                      <div class="badge-status"
+                           [style.background]="scoreBandBg(sc.scoreBand)"
+                           [style.color]="scoreBandColor(sc.scoreBand)"
+                           style="font-size:.7rem;font-weight:700;letter-spacing:.4px;text-transform:uppercase;display:inline-block;">
+                        {{ sc.scoreBand }}
+                      </div>
+                    </div>
+
+                    <!-- Score bar -->
+                    <div style="flex:1;min-width:160px;">
+                      <div style="display:flex;justify-content:space-between;font-size:.75rem;font-weight:600;margin-bottom:.35rem;">
+                        <span>300 (Min)</span>
+                        @if (sc.thresholdScore) {
+                          <span [style.color]="scoreBandColor('FAIR')">{{ sc.thresholdScore }} (Threshold)</span>
+                          <span [style.color]="scoreBandColor('EXCELLENT')">{{750}} (Excellent)</span>
+                        }
+                        <span>900 (Max)</span>
+                      </div>
+                      <div class="pipeline-bar">
+                        <div class="pipeline-fill"
+                             [style.width]="((sc.scoreValue - 300) / 600 * 100) + '%'"
+                             [style.background]="scoreBandColor(sc.scoreBand)">
+                        </div>
+                      </div>
+                      <div class="mt-2" style="font-size:.78rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+                        @if (sc.thresholdScore) {
+                          <span style="color:var(--text-muted);">Product threshold: <strong>{{ sc.thresholdScore }}</strong></span>
+                        }
+                        @if (sc.isApproveDisabled) {
+                          <span class="badge-status bs-uw_rejected">
+                            <i class="bi bi-x-circle me-1"></i>Below threshold — Approve blocked
+                          </span>
+                        } @else if (sc.scoreBand === 'FAIR') {
+                          <span class="badge-status" style="background:#fffbeb;color:#92400e;">
+                            <i class="bi bi-pencil-square me-1"></i>Manual review range
+                          </span>
+                        } @else if (sc.scoreBand === 'EXCELLENT') {
+                          <span class="badge-status bs-uw_approved">
+                            <i class="bi bi-check-circle me-1"></i>Above threshold — Auto-approve eligible
+                          </span>
+                        }
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Model metadata -->
+
+                  <div class="info-row" style="font-size:.78rem;">
+                    <span class="info-label">Scored At</span>
+                    <span class="info-value">{{ sc.scoredAt | date:'dd MMM yyyy, HH:mm' }}</span>
+                  </div>
+                } @else {
+                  <div style="color:var(--text-muted);font-size:.82rem;padding:.75rem 0;">
+                    No scorecard found — click <strong>Re-score</strong> to run the engine.
+                  </div>
+                }
+
+                <!-- Decision -->
+                @if (decision()) {
+                  @let dec = decision()!;
+                  <hr style="margin:1rem 0;border-color:var(--border);">
+                  <div style="padding:.75rem;border-radius:.5rem;margin-bottom:.75rem;"
+                       [style.background]="decisionBg()">
+                    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.35rem;">
+                      <span style="font-weight:700;font-size:.85rem;"
+                            [style.color]="decisionColor(dec.path)">{{ dec.path }}</span>
+                      <span style="font-size:.72rem;color:var(--text-muted);">
+                        {{ dec.decidedAt | date:'dd MMM yyyy' }}
+                      </span>
+                    </div>
+                    <div style="font-size:.8rem;color:var(--text);">{{ dec.reason }}</div>
+                    @if (dec.triggeredRules) {
+                      <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem;">
+                        Triggered rules: {{ dec.triggeredRules }}
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- Eligibility -->
+                @if (eligibility()) {
+                  @let elig = eligibility()!;
+                  <div style="font-size:.82rem;">
+                    <div style="font-weight:600;margin-bottom:.4rem;">
+                      Eligibility:
+                      @if (elig.eligible) {
+                        <span class="badge-status bs-uw_approved ms-1"><i class="bi bi-check-circle me-1"></i>Eligible</span>
+                      } @else {
+                        <span class="badge-status bs-uw_rejected ms-1"><i class="bi bi-x-circle me-1"></i>Not Eligible</span>
+                      }
+                    </div>
+                    @if (elig.passedRules.length > 0) {
+                      <div style="color:#15803d;margin-bottom:.25rem;">
+                        <i class="bi bi-check2 me-1"></i>Passed: {{ elig.passedRules.join(', ') }}
+                      </div>
+                    }
+                    @if (elig.failedRules.length > 0) {
+                      <div style="color:#dc2626;">
+                        <i class="bi bi-x me-1"></i>Failed: {{ elig.failedRules.join(', ') }}
+                      </div>
+                    }
+                    <div style="color:var(--text-muted);margin-top:.35rem;font-size:.75rem;">{{ elig.summary }}</div>
+                  </div>
+                }
+
+              </div>
+            }
+          </div>
+        }
+
         <!-- Documents Tab — split Financial (UW analysis) vs KYC (identity) -->
         @if (activeTab() === 'docs') {
 
@@ -189,11 +348,11 @@
             </button>
           </div>
 
-          <!-- Financial Documents — primary UW analysis documents -->
+          <!-- Financial Documents -->
           @if (docTab() === 'financial') {
             <div class="card mb-3">
               <div class="card-header d-flex align-items-center justify-content-between">
-            <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-graph-up"></i> Financial Documents</span>
+                <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-graph-up"></i> Financial Documents</span>
                 <span style="font-size:.72rem;color:var(--text-muted);">Cash flow · Income · Balance Sheet</span>
               </div>
               <div class="card-body" style="padding:0;">
@@ -239,11 +398,11 @@
             </div>
           }
 
-          <!-- KYC Identity Documents — for reference during UW review -->
+          <!-- KYC Identity Documents -->
           @if (docTab() === 'kyc') {
             <div class="card mb-3">
               <div class="card-header d-flex align-items-center justify-content-between">
-            <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-person-vcard"></i> KYC Identity Documents</span>
+                <span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-person-vcard"></i> KYC Identity Documents</span>
                 <span style="font-size:.72rem;color:var(--text-muted);">Verified by Agent — for reference</span>
               </div>
               <div class="card-body" style="padding:0;">
@@ -290,55 +449,6 @@
           }
         }
 
-
-        <!-- CIBIL Credit Assessment -->
-        <div class="card mb-3">
-          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
-            <span class="card-title"><i class="bi bi-graph-up"></i> CIBIL Credit Assessment</span>
-            <button class="btn btn-outline-primary btn-sm" (click)="computeCibil()">
-              <i class="bi bi-calculator"></i> Calculate Score
-            </button>
-          </div>
-          @if (cibilScore()) {
-            <div class="card-body">
-              <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;">
-                <div style="text-align:center;">
-                  <div style="font-family:var(--font-head);font-size:2.5rem;font-weight:800;"
-                       [style.color]="cibilScore()!.score>=700?'var(--success)':cibilScore()!.score>=600?'var(--warning)':'var(--danger)'">
-                    {{ cibilScore()!.score }}
-                  </div>
-                  <div style="font-size:.72rem;font-weight:700;letter-spacing:.4px;text-transform:uppercase;"
-                       [style.color]="cibilScore()!.score>=700?'var(--success)':cibilScore()!.score>=600?'var(--warning)':'var(--danger)'">
-                    {{ cibilScore()!.label }}
-                  </div>
-                </div>
-                <div style="flex:1;">
-                  <div style="display:flex;justify-content:space-between;font-size:.78rem;font-weight:600;margin-bottom:.35rem;">
-                    <span>Poor (300)</span><span>Fair (650)</span><span>Excellent (900)</span>
-                  </div>
-                  <div class="pipeline-bar">
-                    <div class="pipeline-fill"
-                         [style.width]="((cibilScore()!.score - 300) / 600 * 100) + '%'"
-                         [style.background]="cibilScore()!.score>=700?'var(--success)':cibilScore()!.score>=600?'var(--warning)':'var(--danger)'">
-                    </div>
-                  </div>
-                  <div class="mt-2" style="font-size:.78rem;">
-                    @if (cibilScore()!.meetsThreshold) {
-                      <span class="badge-status bs-uw_approved"><i class="bi bi-check-circle me-1"></i>Meets product threshold</span>
-                    } @else {
-                      <span class="badge-status bs-uw_rejected"><i class="bi bi-exclamation-triangle me-1"></i>Below product threshold (min 650)</span>
-                    }
-                  </div>
-                </div>
-              </div>
-            </div>
-          } @else {
-            <div class="card-body" style="color:var(--text-muted);font-size:.82rem;text-align:center;padding:1.5rem;">
-              Click "Calculate Score" to run a CIBIL assessment for this applicant
-            </div>
-          }
-        </div>
-
         <!-- Decision Form (always visible when app selected) -->
         <div class="card">
           <div class="card-header d-flex align-items-center justify-content-between"><span class="fw-bold fs-6 text-primary-emphasis d-flex align-items-center gap-2"><i class="bi bi-gavel"></i> Make Decision</span></div>
@@ -358,9 +468,9 @@
                     <label style="cursor:pointer;flex:1;min-width:100px;">
                       <input type="radio" formControlName="decision" [value]="d.value" style="display:none;">
                       <div class="btn w-100 btn-sm"
-                     [class]="f['decision'].value === d.value ? d.color : 'btn-outline-secondary'"
-                     [class.opacity-50]="d.value === 'APPROVE' && !canApprove"
-                     [class.pe-none]="d.value === 'APPROVE' && !canApprove">
+                           [class]="f['decision'].value === d.value ? d.color : 'btn-outline-secondary'"
+                           [class.opacity-50]="d.value === 'APPROVE' && !canApprove"
+                           [class.pe-none]="d.value === 'APPROVE' && !canApprove">
                         {{ d.label }}
                       </div>
                     </label>

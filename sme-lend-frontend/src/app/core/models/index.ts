@@ -241,17 +241,21 @@ export interface AppliedFeeDto {
 // ══════════════════════════════════════════════════════════════
 //  SCORECARD + DECISION
 // ══════════════════════════════════════════════════════════════
-export type ScoreBand    = 'LOW'|'MEDIUM'|'HIGH'|'EXCELLENT';
+export type ScoreBand    = 'LOW'|'MEDIUM'|'HIGH'|'EXCELLENT'|'POOR'|'FAIR';
 export type DecisionPath = 'AUTO_APPROVE'|'AUTO_DECLINE'|'ROUTE_TO_UW';
 
 export interface ScorecardResponse {
-  scoreId:       number;
-  applicationId: number;
-  modelVersion?: string;
-  inputsJson?:   string;
-  scoreValue:    number;
-  scoreBand:     ScoreBand;
-  scoredAt?:     string;
+  scoreId:            number;
+  applicationId:      number;
+  modelVersion?:      string;
+  inputsJson?:        string;
+  scoreValue:         number;
+  scoreBand:          ScoreBand;
+  scoredAt?:          string;
+  /** Product's creditThreshold used to classify this score. */
+  thresholdScore?:    number;
+  /** True when scoreBand is POOR — Approve button must be disabled. */
+  isApproveDisabled?: boolean;
 }
 export interface DecisionResponse {
   decisionId:     number;

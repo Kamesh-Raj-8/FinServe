@@ -56,8 +56,20 @@ export class UnderwritingComponent implements OnInit {
   });
   get f() { return this.form.controls; }
 
-  pgQueue = paginate(() => this.queue());
+  // ── Queue search + paginator ────────────────────────────────────────
+  searchTerm = signal('');
 
+  filteredQueue = computed(() => {
+    const term = this.searchTerm().toLowerCase().trim();
+    if (!term) return this.queue();
+    return this.queue().filter(a =>
+      String(a.applicationId).includes(term) ||
+      (a.smeLegalName?.toLowerCase().includes(term) ?? false) ||
+      (a.status?.toLowerCase().includes(term) ?? false)
+    );
+  });
+
+  pgQueue = paginate(() => this.filteredQueue());
 
   ngOnInit() { this.load(); }
 
@@ -125,16 +137,45 @@ export class UnderwritingComponent implements OnInit {
     });
   }
 
+  // ── Score-based approval gate (driven entirely by backend ScorecardResponse) ──
+
+  /**
+   * Returns false when the backend signals isApproveDisabled (POOR band).
+   * Falls back to scoreBand check so the gate works even on cached scorecards
+   * that pre-date the isApproveDisabled field.
+   */
+  get canApprove(): boolean {
+    const sc = this.scorecard();
+    if (!sc) return true; // no scorecard yet — backend will enforce on submit
+    if (sc.isApproveDisabled !== undefined) return !sc.isApproveDisabled;
+    return sc.scoreBand !== 'POOR';
+  }
+
+  get scoreBlockReason(): string | null {
+    const sc = this.scorecard();
+    if (!sc) return null;
+    if (sc.scoreBand === 'POOR') {
+      const threshold = sc.thresholdScore ?? 'the product threshold';
+      return `Score ${sc.scoreValue} (POOR) is below the product threshold of ${threshold}. `
+           + `APPROVE is disabled — only REJECT or RETURN is available for below-threshold applications.`;
+    }
+    return null;
+  }
+
+  // ── Colour helpers ───────────────────────────────────────────────────
+
   scoreBandColor(band: string): string {
     const map: Record<string, string> = {
-      EXCELLENT: '#15803d', HIGH: '#0d9488', MEDIUM: '#d97706', LOW: '#dc2626'
+      EXCELLENT: '#15803d', HIGH: '#0d9488', MEDIUM: '#d97706',
+      FAIR: '#d97706', POOR: '#dc2626', LOW: '#dc2626'
     };
     return map[band] ?? '#6b7280';
   }
 
   scoreBandBg(band: string): string {
     const map: Record<string, string> = {
-      EXCELLENT: '#dcfce7', HIGH: '#f0fdfa', MEDIUM: '#fffbeb', LOW: '#fee2e2'
+      EXCELLENT: '#dcfce7', HIGH: '#f0fdfa', MEDIUM: '#fffbeb',
+      FAIR: '#fffbeb', POOR: '#fee2e2', LOW: '#fee2e2'
     };
     return map[band] ?? '#f9fafb';
   }
@@ -144,7 +185,7 @@ export class UnderwritingComponent implements OnInit {
     if (!d) return '#f9fafb';
     return this.scoreBandBg(
       d.path === 'AUTO_APPROVE' ? 'EXCELLENT' :
-      d.path === 'AUTO_DECLINE' ? 'LOW' : 'MEDIUM'
+      d.path === 'AUTO_DECLINE' ? 'POOR' : 'FAIR'
     );
   }
 
@@ -192,43 +233,6 @@ export class UnderwritingComponent implements OnInit {
   previewDoc = signal<DocResponse | null>(null);
   openPreview(doc: DocResponse) { this.previewDoc.set(doc); }
   closePreview() { this.previewDoc.set(null); }
-
-  // ── CIBIL Score ─────────────────────────────────────────────
-  /** Simulated CIBIL score for the current application's SME/applicant */
-  cibilScore = signal<{score:number, label:string, meetsThreshold:boolean}|null>(null);
-
-  /**
-   * CIBIL / score-based approval gate.
-   * LOW band → cannot approve (disable button + show reason).
-   * MEDIUM/HIGH/EXCELLENT → underwriter has full control.
-   * EXCELLENT ≥800 → auto-approved by system anyway (never reaches UW queue).
-   */
-  get canApprove(): boolean {
-    const sc = this.scorecard();
-    if (!sc) return true;  // no score yet — allow (backend will validate)
-    return sc.scoreBand !== 'LOW';
-  }
-
-  get scoreBlockReason(): string | null {
-    const sc = this.scorecard();
-    if (!sc) return null;
-    if (sc.scoreBand === 'LOW') {
-      return `Score ${sc.scoreValue} (LOW) — APPROVE is disabled. Only REJECT or RETURN is available for low-score applications.`;
-    }
-    return null;
-  }
-
-  computeCibil() {
-    const app = this.selected();
-    if (!app) return;
-    // Deterministic score based on applicationId seed + amount ratio
-    const seed = app.applicationId * 6364136223846793005 + 1442695040888963407;
-    const leverageRatio = app.requestedAmount / (app.requestedAmount * 1.5);
-    const base = 550 + Math.abs(seed % 300);
-    const score = Math.max(300, Math.min(900, Math.round(base - leverageRatio * 80)));
-    const label = score >= 750 ? 'EXCELLENT' : score >= 700 ? 'GOOD' : score >= 650 ? 'FAIR' : score >= 600 ? 'POOR' : 'VERY_POOR';
-    this.cibilScore.set({ score, label, meetsThreshold: score >= 650 });
-  }
 
   // ── Document split ─────────────────────────────────────────────
   docTab = signal<'financial'|'kyc'>('financial');

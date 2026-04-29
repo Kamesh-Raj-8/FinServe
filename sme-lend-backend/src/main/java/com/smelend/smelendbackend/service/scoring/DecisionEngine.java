@@ -18,32 +18,28 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Scoring + Auto-Decisioning Engine.
+ * Scoring + Auto-Decisioning Engine — Single Source of Truth for all CIBIL/score assessment.
  *
  * Pipeline (runs once when an application is submitted via scoreAndDecide):
  *
- *   Step 1 — Income adequacy check (ScoreBand)
- *             Primary promoter annualised income vs. product.minIncomeAmount.
- *             EXCELLENT : annualisedIncome >= minIncomeAmount  (income-eligible)
- *             POOR      : anything else, including missing data (conservative default)
- *
- *   Step 2 — Weighted scoreValue (300–900, deterministic):
+ *   Step 1 — Weighted scoreValue (300–900, deterministic):
  *             40 % leverage  — requestedAmount / product.maxAmount
  *             30 % tenor     — tenorMonths / product.maxTenorMonths
  *             30 % income    — annualisedIncome / minIncomeAmount  (capped at 1.0)
  *             Higher income + lower leverage/tenor = higher score.
- *             Hard ceiling: POOR-band applications are capped at 699 to preserve
- *             the invariant that UnderwritingService's 700-floor always blocks them.
+ *
+ *   Step 2 — Dynamic 3-tier band from product.creditThreshold (T):
+ *             POOR      : score < T                   → approve blocked
+ *             FAIR      : T <= score < 750        → manual underwriter review
+ *             EXCELLENT : score >= 750           → auto-approve eligible
  *
  *   Step 3 — Eligibility rules (product amount cap, tenor range, custom policies)
  *
  *   Step 4 — Routing:
- *             EXCELLENT band + score >= 750 + eligibility passes → AUTO_APPROVE
- *             Any eligibility failure                             → AUTO_DECLINE
- *             All other cases (POOR band, score 700–749)         → ROUTE_TO_UW
- *
- * Note: UnderwritingService independently hard-blocks UW approval when score < 700.
- *       The POOR-band cap at 699 ensures those two constraints are always consistent.
+ *             EXCELLENT band + eligibility passes → AUTO_APPROVE
+ *             Any eligibility failure             → AUTO_DECLINE
+ *             FAIR or POOR band                  → ROUTE_TO_UW
+ *                 (UnderwritingService independently hard-blocks approval when band = POOR)
  */
 @Service
 public class DecisionEngine {
@@ -73,12 +69,13 @@ public class DecisionEngine {
         LoanApplication app = appRepo.findById(applicationId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Application not found"));
 
-        // Idempotent: if a decision already exists, return it without re-running the engine
+        // Idempotent: return cached decision without re-running the engine
         return decisionRepo.findByApplication_ApplicationId(applicationId)
                 .map(this::toDecisionDto)
                 .orElseGet(() -> runEngine(app));
     }
 
+    @Transactional(readOnly = true)
     public ScorecardResponse getScorecardByApplication(Long applicationId) {
         return scorecardRepo.findByApplication_ApplicationId(applicationId)
                 .map(this::toScoreDto)
@@ -86,6 +83,7 @@ public class DecisionEngine {
                         "Scorecard not found for application #" + applicationId));
     }
 
+    @Transactional(readOnly = true)
     public DecisionResponse getDecisionByApplication(Long applicationId) {
         return decisionRepo.findByApplication_ApplicationId(applicationId)
                 .map(this::toDecisionDto)
@@ -97,7 +95,7 @@ public class DecisionEngine {
 
     private DecisionResponse runEngine(LoanApplication app) {
 
-        // Step 1 + 2: Score (income adequacy + weighted formula)
+        // Step 1 + 2: Weighted score + 3-tier band
         Scorecard sc = buildScorecard(app);
         scorecardRepo.save(sc);
 
@@ -105,25 +103,27 @@ public class DecisionEngine {
         var eligibility = eligibilityService.checkApplication(app.getApplicationId());
 
         // Step 4: Route
-        DecisionPath    path;
+        DecisionPath      path;
         ApplicationStatus newStatus;
-        String          reason;
+        String            reason;
+
+        int threshold = resolveThreshold(app.getProduct());
 
         if (!eligibility.isEligible()) {
             path      = DecisionPath.AUTO_DECLINE;
             newStatus = ApplicationStatus.UW_REJECTED;
             reason    = "Eligibility failed: " + eligibility.getSummary();
 
-        } else if (sc.getScoreBand() == ScoreBand.EXCELLENT && sc.getScoreValue() >= 750) {
+        } else if (sc.getScoreBand() == ScoreBand.EXCELLENT) {
             path      = DecisionPath.AUTO_APPROVE;
             newStatus = ApplicationStatus.AUTO_APPROVED;
-            reason    = "Income adequate, score " + sc.getScoreValue()
-                        + " (EXCELLENT, ≥750) — auto-approved.";
+            reason    = "Score " + sc.getScoreValue() + " (EXCELLENT, ≥ " + (750)
+                        + ") — auto-approved.";
 
         } else {
             path      = DecisionPath.ROUTE_TO_UW;
             newStatus = ApplicationStatus.ROUTED_TO_UW;
-            reason    = buildUwReason(sc);
+            reason    = buildUwReason(sc, threshold);
         }
 
         app.setStatus(newStatus);
@@ -143,46 +143,39 @@ public class DecisionEngine {
     // ── Scorecard builder ─────────────────────────────────────────────
 
     private Scorecard buildScorecard(LoanApplication app) {
-        LoanProduct prod = app.getProduct();
+        LoanProduct prod     = app.getProduct();
+        int         threshold = resolveThreshold(prod);
 
-        // ── Income adequacy (ScoreBand) ──────────────────────────────
-        Promoter  primary         = findPrimaryPromoter(app);
+        // ── Weighted score (300–900) ─────────────────────────────────
+        Promoter   primary         = findPrimaryPromoter(app);
         BigDecimal annualisedIncome = annualise(primary);
         BigDecimal minIncome        = prod.getMinIncomeAmount();
 
-        boolean incomeAdequate = minIncome != null
-                && minIncome.compareTo(BigDecimal.ZERO) > 0
-                && annualisedIncome.compareTo(minIncome) >= 0;
-
-        ScoreBand band = incomeAdequate ? ScoreBand.EXCELLENT : ScoreBand.POOR;
-
-        // ── Weighted score (300–900) ─────────────────────────────────
         double leverage    = safeDivide(app.getRequestedAmount(), prod.getMaxAmount());
         double tenorRatio  = safeDivide(app.getTenorMonths(), prod.getMaxTenorMonths());
         double incomeRatio = (minIncome != null && minIncome.compareTo(BigDecimal.ZERO) > 0)
                 ? Math.min(1.0, annualisedIncome.doubleValue() / minIncome.doubleValue())
                 : 0.0;
 
-        // Formula: 900 base, subtract leverage/tenor risk, add income benefit, apply offset
-        //   leverage  40% weight — max penalty -240
-        //   tenor     30% weight — max penalty -180
-        //   income    30% weight — max benefit +180
-        //   offset    -180       — anchors neutral mid-risk case to ~600
+        // 900 base — leverage/tenor risk penalty + income benefit — neutral offset
         double raw   = 900 - (leverage * 240) - (tenorRatio * 180) + (incomeRatio * 180) - 180;
         int    score = Math.max(300, Math.min(900, (int) Math.round(raw)));
 
-        // Hard cap: POOR-band applications cannot exceed 699.
-        // This guarantees the UnderwritingService 700-floor always blocks them,
-        // regardless of how favourable the leverage/tenor values are.
-        if (band == ScoreBand.POOR) {
-            score = Math.min(score, 699);
+        // ── Dynamic 3-tier band from product creditThreshold ─────────
+        ScoreBand band;
+        if (score < threshold) {
+            band = ScoreBand.POOR;
+        } else if (score < 750) {
+            band = ScoreBand.FAIR;
+        } else {
+            band = ScoreBand.EXCELLENT;
         }
 
         String inputsJson = String.format(
                 "{\"requestedAmount\":%s,\"tenorMonths\":%d,\"productId\":%d,"
                 + "\"leverage\":%.3f,\"tenorRatio\":%.3f,"
                 + "\"annualisedIncome\":%s,\"minIncomeAmount\":%s,"
-                + "\"incomeRatio\":%.3f,\"band\":\"%s\"}",
+                + "\"incomeRatio\":%.3f,\"thresholdScore\":%d,\"band\":\"%s\"}",
                 app.getRequestedAmount().toPlainString(),
                 app.getTenorMonths(),
                 prod.getProductId(),
@@ -190,11 +183,12 @@ public class DecisionEngine {
                 annualisedIncome.toPlainString(),
                 minIncome != null ? minIncome.toPlainString() : "null",
                 incomeRatio,
+                threshold,
                 band.name());
 
         return Scorecard.builder()
                 .application(app)
-                .modelVersion("v2.0-income-weighted")
+                .modelVersion("v2.1-threshold-dynamic")
                 .inputsJson(inputsJson)
                 .scoreValue(score)
                 .scoreBand(band)
@@ -203,6 +197,15 @@ public class DecisionEngine {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Resolves the threshold score from the product's creditThreshold.
+     * Falls back to 700 when not configured.
+     */
+    int resolveThreshold(LoanProduct product) {
+        BigDecimal t = product.getCreditThreshold();
+        return (t != null && t.compareTo(BigDecimal.ZERO) > 0) ? t.intValue() : 700;
+    }
 
     private Promoter findPrimaryPromoter(LoanApplication app) {
         List<Promoter> promoters = promoterRepo.findBySme_SmeId(app.getSme().getSmeId());
@@ -226,18 +229,20 @@ public class DecisionEngine {
         return denominator == 0 ? 0.0 : (double) numerator / denominator;
     }
 
-    private String buildUwReason(Scorecard sc) {
+    private String buildUwReason(Scorecard sc, int threshold) {
         if (sc.getScoreBand() == ScoreBand.POOR) {
-            return "Income inadequate (POOR band, score " + sc.getScoreValue()
-                   + ") — routed to underwriter. Note: UW approval blocked for score < 700.";
+            return "Score " + sc.getScoreValue() + " is below the product threshold (" + threshold
+                   + ") — routed to underwriter. Note: UW approval is blocked for POOR-band applications.";
         }
-        return "Income adequate (EXCELLENT band) but score " + sc.getScoreValue()
-               + " is below 750 threshold — routed to underwriter for manual review.";
+        // FAIR band
+        return "Score " + sc.getScoreValue() + " is within the manual review range ["
+               + threshold + "–" + (749) + "] (FAIR) — routed to underwriter for manual review.";
     }
 
     // ── Mappers ───────────────────────────────────────────────────────
 
     private ScorecardResponse toScoreDto(Scorecard s) {
+        int threshold = resolveThreshold(s.getApplication().getProduct());
         return ScorecardResponse.builder()
                 .scoreId(s.getScoreId())
                 .applicationId(s.getApplication().getApplicationId())
@@ -246,6 +251,8 @@ public class DecisionEngine {
                 .scoreValue(s.getScoreValue())
                 .scoreBand(s.getScoreBand().name())
                 .scoredAt(s.getScoredAt())
+                .thresholdScore(threshold)
+                .isApproveDisabled(s.getScoreBand() == ScoreBand.POOR)
                 .build();
     }
 
